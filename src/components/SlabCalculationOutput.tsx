@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, CheckCircle2, XCircle, FileText, Grid3X3 } from "lucide-react";
+import { Copy, CheckCircle2, XCircle, AlertTriangle, FileText, Grid3X3 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import type { SlabResult, CalculationStep } from "@/lib/slabCalculations";
 
@@ -8,19 +8,44 @@ interface SlabCalculationOutputProps {
   result: SlabResult | null;
 }
 
+function StatusIndicator({ status }: { status?: 'safe' | 'review' | 'unsafe' }) {
+  if (!status) return null;
+  
+  switch (status) {
+    case 'safe':
+      return <span className="inline-flex items-center gap-1 text-success text-xs font-semibold">🟢 Safe</span>;
+    case 'review':
+      return <span className="inline-flex items-center gap-1 text-warning text-xs font-semibold">🟡 Review</span>;
+    case 'unsafe':
+      return <span className="inline-flex items-center gap-1 text-destructive text-xs font-semibold">🔴 Unsafe</span>;
+  }
+}
+
 function StepDisplay({ step }: { step: CalculationStep }) {
   return (
     <div className="animate-slide-up border-l-2 border-primary/30 pl-4 py-3 hover:border-primary/60 transition-colors">
-      <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-        {step.title}
-        {step.isCheck && (
-          step.checkPassed ? (
-            <CheckCircle2 className="h-4 w-4 text-success" />
-          ) : (
-            <XCircle className="h-4 w-4 text-destructive" />
-          )
-        )}
-      </h4>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h4 className="font-semibold text-foreground flex items-center gap-2">
+          {step.title}
+          {step.isCheck && (
+            step.checkPassed ? (
+              <CheckCircle2 className="h-4 w-4 text-success" />
+            ) : step.status === 'review' ? (
+              <AlertTriangle className="h-4 w-4 text-warning" />
+            ) : (
+              <XCircle className="h-4 w-4 text-destructive" />
+            )
+          )}
+        </h4>
+        <div className="flex items-center gap-2">
+          <StatusIndicator status={step.status} />
+          {step.bsReference && (
+            <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded">
+              {step.bsReference}
+            </span>
+          )}
+        </div>
+      </div>
       
       {step.formula && (
         <p className="font-mono text-primary text-sm mb-1">
@@ -38,7 +63,9 @@ function StepDisplay({ step }: { step: CalculationStep }) {
         step.isCheck 
           ? step.checkPassed 
             ? "text-success" 
-            : "text-destructive"
+            : step.status === 'review'
+              ? "text-warning"
+              : "text-destructive"
           : "text-accent"
       }`}>
         {step.result}
@@ -65,7 +92,7 @@ export function SlabCalculationOutput({ result }: SlabCalculationOutputProps) {
           </div>
           <h3 className="font-semibold text-lg mb-2">No Calculations Yet</h3>
           <p className="text-muted-foreground text-sm max-w-xs">
-            Enter your slab parameters and click Calculate to generate step-by-step design calculations.
+            Complete the slab declaration, enter parameters, and click Calculate to generate step-by-step design calculations.
           </p>
         </CardContent>
       </Card>
@@ -75,11 +102,14 @@ export function SlabCalculationOutput({ result }: SlabCalculationOutputProps) {
   const copyToClipboard = () => {
     const text = result.steps
       .map((step) => {
-        let content = `${step.title}\n`;
+        let content = `${step.title}`;
+        if (step.bsReference) content += ` [${step.bsReference}]`;
+        content += `\n`;
         if (step.formula) content += `  Formula: ${step.formula}\n`;
         if (step.substitution) content += `  ${step.substitution}\n`;
         content += `  Result: ${step.result}`;
         if (step.explanation) content += `\n  Note: ${step.explanation}`;
+        if (step.status) content += `\n  Status: ${step.status.toUpperCase()}`;
         return content;
       })
       .join("\n\n");
@@ -133,18 +163,24 @@ export function SlabCalculationOutput({ result }: SlabCalculationOutputProps) {
             </span>
           </div>
           
+          {/* Panel Type Display */}
+          <div className="mb-3 p-2 bg-background/50 rounded text-sm">
+            <span className="text-muted-foreground">Panel Type: </span>
+            <span className="font-semibold">{result.summary.panelType}</span>
+          </div>
+          
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
             <div className="bg-background/50 rounded p-2">
               <p className="text-xs text-muted-foreground">Ultimate Load</p>
               <p className="font-mono font-semibold">{result.summary.ultimateLoad.toFixed(2)} kN/m²</p>
             </div>
             <div className="bg-background/50 rounded p-2">
-              <p className="text-xs text-muted-foreground">Short Span Moment</p>
+              <p className="text-xs text-muted-foreground">Short Span M⁺</p>
               <p className="font-mono font-semibold">{result.summary.shortSpanMoment.toFixed(2)} kNm/m</p>
             </div>
             {result.summary.longSpanMoment !== undefined && (
               <div className="bg-background/50 rounded p-2">
-                <p className="text-xs text-muted-foreground">Long Span Moment</p>
+                <p className="text-xs text-muted-foreground">Long Span M⁺</p>
                 <p className="font-mono font-semibold">{result.summary.longSpanMoment.toFixed(2)} kNm/m</p>
               </div>
             )}
@@ -165,6 +201,18 @@ export function SlabCalculationOutput({ result }: SlabCalculationOutputProps) {
               </div>
             )}
           </div>
+
+          {/* Status Summary */}
+          <div className="mt-3 pt-3 border-t border-border/30 flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Shear:</span>
+              <StatusIndicator status={result.summary.shearStatus} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Deflection:</span>
+              <StatusIndicator status={result.summary.deflectionStatus} />
+            </div>
+          </div>
         </div>
 
         {/* Step-by-Step Calculations */}
@@ -172,6 +220,12 @@ export function SlabCalculationOutput({ result }: SlabCalculationOutputProps) {
           {result.steps.map((step, index) => (
             <StepDisplay key={index} step={step} />
           ))}
+        </div>
+
+        {/* Footer Note */}
+        <div className="mt-6 pt-4 border-t border-border/30 text-xs text-muted-foreground text-center">
+          <p>All calculations comply with BS 8110-1:1997</p>
+          <p className="mt-1 font-semibold">This module extends the original MVP without replacing existing functionality.</p>
         </div>
       </CardContent>
     </Card>

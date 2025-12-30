@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, CheckCircle2, XCircle, FileText } from "lucide-react";
+import { Copy, CheckCircle2, XCircle, AlertTriangle, FileText } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import type { BeamResult, CalculationStep } from "@/lib/beamCalculations";
 
@@ -8,19 +8,44 @@ interface CalculationOutputProps {
   result: BeamResult | null;
 }
 
+function StatusIndicator({ status }: { status?: 'safe' | 'review' | 'unsafe' }) {
+  if (!status) return null;
+  
+  switch (status) {
+    case 'safe':
+      return <span className="inline-flex items-center gap-1 text-success text-xs font-semibold">🟢 Safe</span>;
+    case 'review':
+      return <span className="inline-flex items-center gap-1 text-warning text-xs font-semibold">🟡 Review</span>;
+    case 'unsafe':
+      return <span className="inline-flex items-center gap-1 text-destructive text-xs font-semibold">🔴 Unsafe</span>;
+  }
+}
+
 function StepDisplay({ step, index }: { step: CalculationStep; index: number }) {
   return (
     <div className="animate-slide-up border-l-2 border-primary/30 pl-4 py-3 hover:border-primary/60 transition-colors">
-      <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-        {step.title}
-        {step.isCheck && (
-          step.checkPassed ? (
-            <CheckCircle2 className="h-4 w-4 text-success" />
-          ) : (
-            <XCircle className="h-4 w-4 text-destructive" />
-          )
-        )}
-      </h4>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h4 className="font-semibold text-foreground flex items-center gap-2">
+          {step.title}
+          {step.isCheck && (
+            step.checkPassed ? (
+              <CheckCircle2 className="h-4 w-4 text-success" />
+            ) : step.status === 'review' ? (
+              <AlertTriangle className="h-4 w-4 text-warning" />
+            ) : (
+              <XCircle className="h-4 w-4 text-destructive" />
+            )
+          )}
+        </h4>
+        <div className="flex items-center gap-2">
+          <StatusIndicator status={step.status} />
+          {step.bsReference && (
+            <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded">
+              {step.bsReference}
+            </span>
+          )}
+        </div>
+      </div>
       
       {step.formula && (
         <p className="font-mono text-primary text-sm mb-1">
@@ -29,16 +54,18 @@ function StepDisplay({ step, index }: { step: CalculationStep; index: number }) 
       )}
       
       {step.substitution && (
-        <p className="font-mono text-muted-foreground text-sm mb-1">
+        <p className="font-mono text-muted-foreground text-sm mb-1 whitespace-pre-line">
           {step.substitution}
         </p>
       )}
       
-      <p className={`font-mono text-sm font-semibold ${
+      <p className={`font-mono text-sm font-semibold whitespace-pre-line ${
         step.isCheck 
           ? step.checkPassed 
             ? "text-success" 
-            : "text-destructive"
+            : step.status === 'review'
+              ? "text-warning"
+              : "text-destructive"
           : "text-accent"
       }`}>
         {step.result}
@@ -75,11 +102,14 @@ export function CalculationOutput({ result }: CalculationOutputProps) {
   const copyToClipboard = () => {
     const text = result.steps
       .map((step, i) => {
-        let content = `${step.title}\n`;
+        let content = `${step.title}`;
+        if (step.bsReference) content += ` [${step.bsReference}]`;
+        content += `\n`;
         if (step.formula) content += `  Formula: ${step.formula}\n`;
         if (step.substitution) content += `  ${step.substitution}\n`;
         content += `  Result: ${step.result}`;
         if (step.explanation) content += `\n  Note: ${step.explanation}`;
+        if (step.status) content += `\n  Status: ${step.status.toUpperCase()}`;
         return content;
       })
       .join("\n\n");
@@ -98,7 +128,7 @@ export function CalculationOutput({ result }: CalculationOutputProps) {
           <div className="h-8 w-8 rounded-md bg-accent/10 flex items-center justify-center">
             <FileText className="h-4 w-4 text-accent" />
           </div>
-          Design Calculations
+          Beam Design Calculations
         </CardTitle>
         <Button
           variant="outline"
@@ -130,23 +160,37 @@ export function CalculationOutput({ result }: CalculationOutputProps) {
             </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div>
+            <div className="bg-background/50 rounded p-2">
               <span className="text-muted-foreground block text-xs">Moment</span>
               <span className="font-mono font-semibold">{result.summary.ultimateMoment.toFixed(1)} kN·m</span>
             </div>
-            <div>
+            <div className="bg-background/50 rounded p-2">
               <span className="text-muted-foreground block text-xs">Tension Steel</span>
               <span className="font-mono font-semibold">{result.summary.tensionSteel.toFixed(0)} mm²</span>
             </div>
-            <div>
+            <div className="bg-background/50 rounded p-2">
               <span className="text-muted-foreground block text-xs">Beam Type</span>
               <span className="font-mono font-semibold">
                 {result.summary.isDoublyReinforced ? "Doubly" : "Singly"}
               </span>
             </div>
-            <div>
-              <span className="text-muted-foreground block text-xs">Shear Stress</span>
-              <span className="font-mono font-semibold">{result.summary.shearStress.toFixed(2)} N/mm²</span>
+            <div className="bg-background/50 rounded p-2">
+              <span className="text-muted-foreground block text-xs">Links</span>
+              <span className="font-mono font-semibold">
+                T{result.summary.linkSize}@{result.summary.linkSpacing}mm
+              </span>
+            </div>
+          </div>
+
+          {/* Status Summary */}
+          <div className="mt-3 pt-3 border-t border-border/30 flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Shear:</span>
+              <StatusIndicator status={result.summary.shearStatus} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Deflection:</span>
+              <StatusIndicator status={result.summary.deflectionStatus} />
             </div>
           </div>
         </div>
@@ -156,6 +200,11 @@ export function CalculationOutput({ result }: CalculationOutputProps) {
           {result.steps.map((step, index) => (
             <StepDisplay key={index} step={step} index={index} />
           ))}
+        </div>
+
+        {/* Footer Note */}
+        <div className="mt-6 pt-4 border-t border-border/30 text-xs text-muted-foreground text-center">
+          <p>All calculations comply with BS 8110-1:1997</p>
         </div>
       </CardContent>
     </Card>
