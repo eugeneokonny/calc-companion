@@ -14,18 +14,21 @@ const Index = () => {
     const calculationResult = calculateBeamDesign(input);
     setResult(calculationResult);
     
+    // Calculate effective depth for advisory
+    const effectiveDepth = calculationResult.summary.effectiveDepth;
+    
     // Generate design advisory
     const advisoryResult = analyzeBeamDesign({
       kValue: calculationResult.summary.kValue,
       kPrime: 0.156,
       shearStress: calculationResult.summary.shearStress,
       maxShearStress: Math.min(0.8 * Math.sqrt(input.fcu), 5),
-      actualSpanDepthRatio: (input.span * 1000) / input.effectiveDepth,
+      actualSpanDepthRatio: (input.span * 1000) / effectiveDepth,
       allowableSpanDepthRatio: 20 * 1.3, // Basic ratio × typical modification
       tensionSteel: calculationResult.summary.tensionSteel,
       width: input.width,
-      depth: input.effectiveDepth + input.cover + 10,
-      effectiveDepth: input.effectiveDepth,
+      depth: input.overallDepth,
+      effectiveDepth: effectiveDepth,
       span: input.span,
       fcu: input.fcu,
       fy: input.fy
@@ -50,7 +53,7 @@ const Index = () => {
         </div>
 
         {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-[400px_1fr] gap-6">
+        <div className="grid lg:grid-cols-[420px_1fr] gap-6">
           <div className="lg:sticky lg:top-20 lg:self-start space-y-4">
             <BeamInputForm onCalculate={handleCalculate} />
             

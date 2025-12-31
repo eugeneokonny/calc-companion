@@ -17,8 +17,10 @@ const defaultValues: BeamInput = {
   fcu: 30,
   fy: 460,
   width: 300,
-  effectiveDepth: 450,
+  overallDepth: 500,
   cover: 35,
+  linkDiameter: 10,
+  mainBarDiameter: 20,
 };
 
 export function BeamInputForm({ onCalculate }: BeamInputFormProps) {
@@ -38,6 +40,9 @@ export function BeamInputForm({ onCalculate }: BeamInputFormProps) {
     onCalculate(values);
   };
 
+  // Calculate effective depth for display
+  const effectiveDepth = values.overallDepth - values.cover - values.linkDiameter - values.mainBarDiameter / 2;
+
   const inputFields: { key: keyof BeamInput; label: string; unit: string; min?: number }[] = [
     { key: "span", label: "Span Length", unit: "m", min: 0.5 },
     { key: "deadLoad", label: "Dead Load (Gk)", unit: "kN/m", min: 0 },
@@ -45,8 +50,10 @@ export function BeamInputForm({ onCalculate }: BeamInputFormProps) {
     { key: "fcu", label: "Concrete Grade (fcu)", unit: "N/mm²", min: 20 },
     { key: "fy", label: "Steel Grade (fy)", unit: "N/mm²", min: 250 },
     { key: "width", label: "Beam Width (b)", unit: "mm", min: 150 },
-    { key: "effectiveDepth", label: "Effective Depth (d)", unit: "mm", min: 200 },
-    { key: "cover", label: "Cover to Steel", unit: "mm", min: 20 },
+    { key: "overallDepth", label: "Overall Depth (h)", unit: "mm", min: 200 },
+    { key: "cover", label: "Concrete Cover", unit: "mm", min: 20 },
+    { key: "linkDiameter", label: "Link Diameter (φlink)", unit: "mm", min: 6 },
+    { key: "mainBarDiameter", label: "Main Bar Diameter (φ)", unit: "mm", min: 10 },
   ];
 
   return (
@@ -85,7 +92,18 @@ export function BeamInputForm({ onCalculate }: BeamInputFormProps) {
             ))}
           </div>
 
-          <div className="flex gap-3 pt-4">
+          {/* Calculated Effective Depth Display */}
+          <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Effective Depth (d):</span>
+              <span className="font-mono font-semibold text-primary">{effectiveDepth.toFixed(0)} mm</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              d = h - cover - φlink - φbar/2
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-2">
             <Button
               type="submit"
               className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
