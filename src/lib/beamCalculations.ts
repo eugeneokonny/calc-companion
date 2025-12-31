@@ -5,8 +5,10 @@ export interface BeamInput {
   fcu: number; // N/mm²
   fy: number; // N/mm²
   width: number; // mm
-  effectiveDepth: number; // mm
+  overallDepth: number; // mm (h)
   cover: number; // mm
+  linkDiameter: number; // mm (typically 8, 10, or 12)
+  mainBarDiameter: number; // mm (typically 16, 20, 25, 32)
 }
 
 export interface CalculationStep {
@@ -24,6 +26,7 @@ export interface CalculationStep {
 export interface BeamResult {
   steps: CalculationStep[];
   summary: {
+    effectiveDepth: number;
     ultimateMoment: number;
     kValue: number;
     leverArm: number;
@@ -99,10 +102,23 @@ function calculateLinkSpacing(v: number, vc: number, b: number, d: number, fy: n
 export function calculateBeamDesign(input: BeamInput): BeamResult {
   const steps: CalculationStep[] = [];
   
-  // Step 1: Load Calculation
+  // Calculate effective depth: d = h - cover - φlink - φbar/2
+  const effectiveDepth = input.overallDepth - input.cover - input.linkDiameter - input.mainBarDiameter / 2;
+  
+  // Step 1: Effective Depth Calculation
+  steps.push({
+    title: "Step 1: Effective Depth Calculation",
+    formula: "d = h - cover - φlink - φbar/2",
+    substitution: `d = ${input.overallDepth} - ${input.cover} - ${input.linkDiameter} - ${input.mainBarDiameter}/2`,
+    result: `d = ${effectiveDepth.toFixed(0)} mm`,
+    explanation: "Effective depth from compression face to centroid of tension steel",
+    bsReference: "BS8110 Cl. 3.4.4.1"
+  });
+
+  // Step 2: Load Calculation
   const ultimateLoad = 1.4 * input.deadLoad + 1.6 * input.liveLoad;
   steps.push({
-    title: "Step 1: Ultimate Design Load",
+    title: "Step 2: Ultimate Design Load",
     formula: "w = 1.4Gk + 1.6Qk",
     substitution: `w = 1.4 × ${input.deadLoad} + 1.6 × ${input.liveLoad}`,
     result: `w = ${ultimateLoad.toFixed(2)} kN/m`,
@@ -110,25 +126,25 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
     bsReference: "BS8110 Cl. 2.4.3"
   });
 
-  // Step 2: Ultimate Moment
+  // Step 3: Ultimate Moment
   const ultimateMoment = (ultimateLoad * Math.pow(input.span, 2)) / 8;
   steps.push({
-    title: "Step 2: Ultimate Bending Moment",
+    title: "Step 3: Ultimate Bending Moment",
     formula: "M = wL²/8 (for simply supported beam with UDL)",
     substitution: `M = ${ultimateLoad.toFixed(2)} × ${input.span}² / 8`,
     result: `M = ${ultimateMoment.toFixed(2)} kN·m`,
     explanation: "Maximum moment at mid-span for simply supported beam"
   });
 
-  // Step 3: K Value
+  // Step 4: K Value
   const M_Nmm = ultimateMoment * 1e6;
-  const kValue = M_Nmm / (input.width * Math.pow(input.effectiveDepth, 2) * input.fcu);
+  const kValue = M_Nmm / (input.width * Math.pow(effectiveDepth, 2) * input.fcu);
   const kPrime = 0.156;
   
   steps.push({
-    title: "Step 3: K Value",
+    title: "Step 4: K Value",
     formula: "K = M / (bd²fcu)",
-    substitution: `K = ${ultimateMoment.toFixed(2)} × 10⁶ / (${input.width} × ${input.effectiveDepth}² × ${input.fcu})`,
+    substitution: `K = ${ultimateMoment.toFixed(2)} × 10⁶ / (${input.width} × ${effectiveDepth.toFixed(0)}² × ${input.fcu})`,
     result: `K = ${kValue.toFixed(4)}`,
     explanation: "Dimensionless parameter to determine beam type",
     bsReference: "BS8110 Cl. 3.4.4.4"
@@ -149,48 +165,48 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
       : "K ≤ K': Section adequate for singly reinforced design"
   });
 
-  // Step 5: Lever Arm
+  // Step 6: Lever Arm
   const kForZ = isDoublyReinforced ? kPrime : kValue;
   const leverArmRatio = 0.5 + Math.sqrt(0.25 - kForZ / 0.9);
-  const leverArm = Math.min(leverArmRatio, 0.95) * input.effectiveDepth;
+  const leverArm = Math.min(leverArmRatio, 0.95) * effectiveDepth;
   
   steps.push({
-    title: "Step 5: Lever Arm",
+    title: "Step 6: Lever Arm",
     formula: "z = d[0.5 + √(0.25 - K/0.9)]",
-    substitution: `z = ${input.effectiveDepth}[0.5 + √(0.25 - ${kForZ.toFixed(4)}/0.9)]`,
-    result: `z = ${leverArm.toFixed(1)} mm (z/d = ${(leverArm/input.effectiveDepth).toFixed(3)})`,
+    substitution: `z = ${effectiveDepth.toFixed(0)}[0.5 + √(0.25 - ${kForZ.toFixed(4)}/0.9)]`,
+    result: `z = ${leverArm.toFixed(1)} mm (z/d = ${(leverArm/effectiveDepth).toFixed(3)})`,
     explanation: "Lever arm limited to 0.95d maximum",
     bsReference: "BS8110 Cl. 3.4.4.4"
   });
 
-  // Step 6: Tension Steel Area
+  // Step 7: Tension Steel Area
   let tensionSteel: number;
   let compressionSteel = 0;
   
   if (isDoublyReinforced) {
-    const MLimit = kPrime * input.width * Math.pow(input.effectiveDepth, 2) * input.fcu;
+    const MLimit = kPrime * input.width * Math.pow(effectiveDepth, 2) * input.fcu;
     const excessMoment = M_Nmm - MLimit;
-    const dPrime = input.cover + 10;
+    const dPrime = input.cover + input.linkDiameter + input.mainBarDiameter / 2;
     
-    compressionSteel = excessMoment / (0.87 * input.fy * (input.effectiveDepth - dPrime));
+    compressionSteel = excessMoment / (0.87 * input.fy * (effectiveDepth - dPrime));
     tensionSteel = (MLimit / (0.87 * input.fy * leverArm)) + compressionSteel;
     
     steps.push({
-      title: "Step 6a: Limiting Moment",
+      title: "Step 7a: Limiting Moment",
       formula: "M' = K'bd²fcu",
-      substitution: `M' = 0.156 × ${input.width} × ${input.effectiveDepth}² × ${input.fcu}`,
+      substitution: `M' = 0.156 × ${input.width} × ${effectiveDepth.toFixed(0)}² × ${input.fcu}`,
       result: `M' = ${(MLimit/1e6).toFixed(2)} kN·m`
     });
     
     steps.push({
-      title: "Step 6b: Compression Steel Area",
+      title: "Step 7b: Compression Steel Area",
       formula: "As' = (M - M') / [0.87fy(d - d')]",
-      substitution: `As' = (${ultimateMoment.toFixed(2)} - ${(MLimit/1e6).toFixed(2)}) × 10⁶ / [0.87 × ${input.fy} × (${input.effectiveDepth} - ${dPrime})]`,
+      substitution: `As' = (${ultimateMoment.toFixed(2)} - ${(MLimit/1e6).toFixed(2)}) × 10⁶ / [0.87 × ${input.fy} × (${effectiveDepth.toFixed(0)} - ${dPrime.toFixed(0)})]`,
       result: `As' = ${compressionSteel.toFixed(0)} mm²`
     });
     
     steps.push({
-      title: "Step 6c: Tension Steel Area",
+      title: "Step 7c: Tension Steel Area",
       formula: "As = M'/(0.87fy·z) + As'",
       substitution: `As = ${(MLimit/1e6).toFixed(2)} × 10⁶/(0.87 × ${input.fy} × ${leverArm.toFixed(1)}) + ${compressionSteel.toFixed(0)}`,
       result: `As = ${tensionSteel.toFixed(0)} mm²`
@@ -208,14 +224,14 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
     });
   }
 
-  // Step 7: Minimum Steel Check
-  const minSteel = 0.0013 * input.width * input.effectiveDepth;
+  // Step 8: Minimum Steel Check
+  const minSteel = 0.0013 * input.width * effectiveDepth;
   const steelOK = tensionSteel >= minSteel;
   
   steps.push({
-    title: "Step 7: Minimum Steel Check",
+    title: "Step 8: Minimum Steel Check",
     formula: "As,min = 0.13%bh ≈ 0.13%bd",
-    substitution: `As,min = 0.0013 × ${input.width} × ${input.effectiveDepth}`,
+    substitution: `As,min = 0.0013 × ${input.width} × ${effectiveDepth.toFixed(0)}`,
     result: `As,min = ${minSteel.toFixed(0)} mm²`,
     isCheck: true,
     checkPassed: steelOK,
@@ -228,35 +244,35 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
 
   const finalTensionSteel = Math.max(tensionSteel, minSteel);
 
-  // Step 8: Shear Force
+  // Step 9: Shear Force
   const shearForce = (ultimateLoad * input.span) / 2;
   
   steps.push({
-    title: "Step 8: Shear Force",
+    title: "Step 9: Shear Force",
     formula: "V = wL/2",
     substitution: `V = ${ultimateLoad.toFixed(2)} × ${input.span} / 2`,
     result: `V = ${shearForce.toFixed(2)} kN`
   });
 
-  // Step 9: Critical Section Shear (at d from support)
-  const criticalShear = shearForce - (ultimateLoad * input.effectiveDepth / 1000);
+  // Step 10: Critical Section Shear (at d from support)
+  const criticalShear = shearForce - (ultimateLoad * effectiveDepth / 1000);
   steps.push({
-    title: "Step 9: Critical Section (at d from support)",
+    title: "Step 10: Critical Section (at d from support)",
     formula: "Vd = V - w × d",
-    substitution: `Vd = ${shearForce.toFixed(2)} - ${ultimateLoad.toFixed(2)} × ${input.effectiveDepth}/1000`,
+    substitution: `Vd = ${shearForce.toFixed(2)} - ${ultimateLoad.toFixed(2)} × ${effectiveDepth.toFixed(0)}/1000`,
     result: `Vd = ${criticalShear.toFixed(2)} kN`,
     bsReference: "BS8110 Cl. 3.4.5.2"
   });
 
-  // Step 10: Shear Stress
-  const shearStress = (criticalShear * 1000) / (input.width * input.effectiveDepth);
-  const vc = calculateVc(finalTensionSteel, input.width, input.effectiveDepth, input.fcu);
+  // Step 11: Shear Stress
+  const shearStress = (criticalShear * 1000) / (input.width * effectiveDepth);
+  const vc = calculateVc(finalTensionSteel, input.width, effectiveDepth, input.fcu);
   const maxShear = Math.min(0.8 * Math.sqrt(input.fcu), 5);
   
   steps.push({
-    title: "Step 10: Shear Stress Check",
+    title: "Step 11: Shear Stress Check",
     formula: "v = V / (bd)",
-    substitution: `v = ${(criticalShear * 1000).toFixed(0)} / (${input.width} × ${input.effectiveDepth})`,
+    substitution: `v = ${(criticalShear * 1000).toFixed(0)} / (${input.width} × ${effectiveDepth.toFixed(0)})`,
     result: `v = ${shearStress.toFixed(2)} N/mm²
 vc = ${vc.toFixed(2)} N/mm² (permissible)
 vmax = ${maxShear.toFixed(2)} N/mm²`,
@@ -268,17 +284,17 @@ vmax = ${maxShear.toFixed(2)} N/mm²`,
 
   const shearStatus: 'safe' | 'unsafe' = shearStress < maxShear ? 'safe' : 'unsafe';
 
-  // Step 11: Shear Reinforcement Design
-  let linkSize = 8;
+  // Step 12: Shear Reinforcement Design
+  let linkSize = input.linkDiameter;
   let linkSpacing = 300;
   
   if (shearStress > vc) {
-    const links = calculateLinkSpacing(shearStress, vc, input.width, input.effectiveDepth, input.fy);
+    const links = calculateLinkSpacing(shearStress, vc, input.width, effectiveDepth, input.fy);
     linkSize = links.size;
     linkSpacing = links.spacing;
     
     steps.push({
-      title: "Step 11: Shear Link Design",
+      title: "Step 12: Shear Link Design",
       formula: "Asv/sv = bv(v - vc) / (0.87fyv)",
       substitution: `v > vc → Shear reinforcement required
 Asv/sv = ${input.width} × (${shearStress.toFixed(2)} - ${vc.toFixed(2)}) / (0.87 × ${input.fy})`,
@@ -287,7 +303,7 @@ Asv/sv = ${input.width} × (${shearStress.toFixed(2)} - ${vc.toFixed(2)}) / (0.8
     });
   } else {
     steps.push({
-      title: "Step 11: Shear Link Design",
+      title: "Step 12: Shear Link Design",
       formula: "v ≤ vc → Nominal links only",
       result: `Provide T${linkSize} links @ ${linkSpacing}mm c/c (nominal)`,
       status: 'safe',
@@ -295,16 +311,16 @@ Asv/sv = ${input.width} × (${shearStress.toFixed(2)} - ${vc.toFixed(2)}) / (0.8
     });
   }
 
-  // Step 12: Deflection Check
+  // Step 13: Deflection Check
   const basicRatio = getBasicSpanDepthRatio('simply-supported');
-  const tensionMod = getTensionModificationFactor(M_Nmm, input.width, input.effectiveDepth, finalTensionSteel, input.fy);
+  const tensionMod = getTensionModificationFactor(M_Nmm, input.width, effectiveDepth, finalTensionSteel, input.fy);
   const compMod = isDoublyReinforced ? getCompressionModificationFactor(compressionSteel, compressionSteel * 0.9) : 1.0;
   const allowableRatio = basicRatio * tensionMod * compMod;
-  const actualRatio = (input.span * 1000) / input.effectiveDepth;
+  const actualRatio = (input.span * 1000) / effectiveDepth;
   const deflectionOK = actualRatio <= allowableRatio;
   
   steps.push({
-    title: "Step 12: Deflection Check",
+    title: "Step 13: Deflection Check",
     formula: "Actual span/d ≤ Basic ratio × Modification factors",
     substitution: `Basic ratio = ${basicRatio}
 Tension modification = ${tensionMod.toFixed(2)}
@@ -322,7 +338,7 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
 
   const deflectionStatus: 'safe' | 'unsafe' = deflectionOK ? 'safe' : 'unsafe';
 
-  // Step 13: Bar Selection
+  // Step 14: Bar Selection
   const suggestBars = (area: number): string => {
     const options = [
       { dia: 12, area: 113 },
@@ -342,7 +358,7 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
   };
 
   steps.push({
-    title: "Step 13: Reinforcement Selection",
+    title: "Step 14: Reinforcement Selection",
     result: `Tension: ${suggestBars(finalTensionSteel)}${compressionSteel > 0 ? `\nCompression: ${suggestBars(compressionSteel)}` : ''}
 Links: T${linkSize}@${linkSpacing}mm c/c`,
     explanation: "Select bars to provide area ≥ As required"
@@ -353,6 +369,7 @@ Links: T${linkSize}@${linkSpacing}mm c/c`,
   return {
     steps,
     summary: {
+      effectiveDepth,
       ultimateMoment,
       kValue,
       leverArm,
