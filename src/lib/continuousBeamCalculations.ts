@@ -43,6 +43,8 @@ export interface SpanResult {
   compressionSteel: number;
   linkSize: number;
   linkSpacing: number;
+  topSteel?: string;
+  bottomSteel?: string;
 }
 
 export interface ContinuousBeamResult {
@@ -60,6 +62,23 @@ export interface ContinuousBeamResult {
     deflectionStatus: 'safe' | 'unsafe';
     failureReasons?: string[];
     suggestions?: DesignSuggestion[];
+    // Extended properties for BS 8110 output
+    ultimateLoad?: number;
+    deadLoad?: number;
+    liveLoad?: number;
+    width?: number;
+    effectiveDepth?: number;
+    fcu?: number;
+    fy?: number;
+    kValue?: number;
+    leverArm?: number;
+    shearStress?: number;
+    vc?: number;
+    actualSpanDepthRatio?: number;
+    basicSpanDepthRatio?: number;
+    modificationFactor?: number;
+    allowableSpanDepthRatio?: number;
+    barSuggestion?: string;
   };
 }
 
@@ -453,7 +472,9 @@ K = ${maxMoment.toFixed(2)} × 10⁶ / (${input.width} × ${input.effectiveDepth
       tensionSteel: finalAs,
       compressionSteel: K_pos > K_prime ? finalAs * 0.3 : 0,
       linkSize: links.size,
-      linkSpacing: links.spacing
+      linkSpacing: links.spacing,
+      topSteel: suggestBars(As_neg > 0 ? As_neg : minSteel),
+      bottomSteel: suggestBars(As_pos > minSteel ? As_pos : minSteel)
     });
     
     maxTensionSteel = Math.max(maxTensionSteel, finalAs);
@@ -541,6 +562,10 @@ Shear Links: See individual span results above`,
     }
   });
 
+  // Calculate vc for summary
+  const vcSummary = calculateVc(maxTensionSteel, input.width, input.effectiveDepth, input.fcu);
+  const leverArm = Math.min(input.effectiveDepth * (0.5 + Math.sqrt(0.25 - Math.min(K, K_prime) / 0.9)), 0.95 * input.effectiveDepth);
+
   return {
     steps,
     spanResults,
@@ -555,7 +580,24 @@ Shear Links: See individual span results above`,
       shearStatus: shearOK ? 'safe' : 'unsafe',
       deflectionStatus: deflectionOK ? 'safe' : 'unsafe',
       failureReasons: !designValid ? failureReasons : undefined,
-      suggestions
+      suggestions,
+      // Extended BS 8110 output properties
+      ultimateLoad: avgLoad,
+      deadLoad: input.spans[0]?.deadLoad || 0,
+      liveLoad: input.spans[0]?.liveLoad || 0,
+      width: input.width,
+      effectiveDepth: input.effectiveDepth,
+      fcu: input.fcu,
+      fy: input.fy,
+      kValue: K,
+      leverArm,
+      shearStress: maxShearStress,
+      vc: vcSummary,
+      actualSpanDepthRatio: actualRatio,
+      basicSpanDepthRatio: basicRatio,
+      modificationFactor: tensionMod,
+      allowableSpanDepthRatio: allowableRatio,
+      barSuggestion: suggestBars(maxTensionSteel)
     }
   };
 }
