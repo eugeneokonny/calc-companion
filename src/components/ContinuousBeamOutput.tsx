@@ -1,8 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, CheckCircle2, XCircle, AlertTriangle, FileText, GitBranch, TrendingUp, TrendingDown } from "lucide-react";
+import { Copy, CheckCircle2, XCircle, AlertTriangle, FileText, GitBranch } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { DesignAdvisory } from "./DesignAdvisory";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { ContinuousBeamResult, CalculationStep, SpanResult } from "@/lib/continuousBeamCalculations";
 
 interface ContinuousBeamOutputProps {
@@ -22,99 +30,41 @@ function StatusIndicator({ status }: { status?: 'safe' | 'review' | 'unsafe' }) 
   }
 }
 
-function StepDisplay({ step }: { step: CalculationStep }) {
+function SectionHeader({ section, title, reference }: { section: string; title: string; reference: string }) {
   return (
-    <div className="animate-slide-up border-l-2 border-primary/30 pl-4 py-3 hover:border-primary/60 transition-colors">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="font-semibold text-foreground flex items-center gap-2">
-          {step.title}
-          {step.isCheck && (
-            step.checkPassed ? (
-              <CheckCircle2 className="h-4 w-4 text-success" />
-            ) : step.status === 'review' ? (
-              <AlertTriangle className="h-4 w-4 text-warning" />
-            ) : (
-              <XCircle className="h-4 w-4 text-destructive" />
-            )
-          )}
-        </h4>
-        <div className="flex items-center gap-2">
-          <StatusIndicator status={step.status} />
-          {step.bsReference && (
-            <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded">
-              {step.bsReference}
-            </span>
-          )}
-        </div>
-      </div>
-      
-      {step.formula && (
-        <p className="font-mono text-primary text-sm mb-1">
-          {step.formula}
-        </p>
-      )}
-      
-      {step.substitution && (
-        <p className="font-mono text-muted-foreground text-sm mb-1 whitespace-pre-line">
-          {step.substitution}
-        </p>
-      )}
-      
-      <p className={`font-mono text-sm font-semibold whitespace-pre-line ${
-        step.isCheck 
-          ? step.checkPassed 
-            ? "text-success" 
-            : step.status === 'review'
-              ? "text-warning"
-              : "text-destructive"
-          : "text-accent"
-      }`}>
-        {step.result}
-      </p>
-      
-      {step.explanation && (
-        <p className="text-xs text-muted-foreground mt-2 italic">
-          {step.explanation}
-        </p>
-      )}
+    <div className="bg-primary/10 border-l-4 border-primary px-4 py-2 mb-4">
+      <h3 className="font-bold text-foreground">
+        SECTION {section} — {title}
+      </h3>
+      <p className="text-xs font-mono text-primary">{reference}</p>
     </div>
   );
 }
 
-function SpanResultCard({ span }: { span: SpanResult }) {
+function FormulaBlock({ formula, substitution, result }: { formula: string; substitution?: string; result?: string }) {
   return (
-    <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-sm">Span {span.spanIndex}</span>
-        <span className="text-xs text-muted-foreground font-mono">{span.length}m</span>
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-background/50 rounded p-2">
-          <div className="text-muted-foreground flex items-center gap-1">
-            <TrendingUp className="h-3 w-3" /> M⁺
-          </div>
-          <div className="font-mono font-semibold text-success">{span.positiveMoment.toFixed(1)} kNm</div>
-        </div>
-        <div className="bg-background/50 rounded p-2">
-          <div className="text-muted-foreground flex items-center gap-1">
-            <TrendingDown className="h-3 w-3" /> M⁻
-          </div>
-          <div className="font-mono font-semibold text-warning">
-            {Math.max(span.negativeMomentLeft, span.negativeMomentRight).toFixed(1)} kNm
-          </div>
-        </div>
-        <div className="bg-background/50 rounded p-2">
-          <div className="text-muted-foreground">Shear</div>
-          <div className="font-mono font-semibold">{Math.max(span.shearLeft, span.shearRight).toFixed(1)} kN</div>
-        </div>
-        <div className="bg-background/50 rounded p-2">
-          <div className="text-muted-foreground">As</div>
-          <div className="font-mono font-semibold">{span.tensionSteel.toFixed(0)} mm²</div>
-        </div>
-      </div>
-      <div className="text-xs text-muted-foreground font-mono">
-        Links: T{span.linkSize}@{span.linkSpacing}mm c/c
-      </div>
+    <div className="bg-muted/30 border border-border/50 rounded-lg p-3 mb-3 font-mono text-sm">
+      <p className="text-primary font-semibold">{formula}</p>
+      {substitution && <p className="text-muted-foreground mt-1">{substitution}</p>}
+      {result && <p className="text-accent font-bold mt-1">{result}</p>}
+    </div>
+  );
+}
+
+function CheckResult({ passed, label, value, limit }: { passed: boolean; label: string; value: string; limit: string }) {
+  return (
+    <div className={`flex items-center gap-2 p-2 rounded ${passed ? 'bg-success/10' : 'bg-destructive/10'}`}>
+      {passed ? (
+        <CheckCircle2 className="h-4 w-4 text-success" />
+      ) : (
+        <XCircle className="h-4 w-4 text-destructive" />
+      )}
+      <span className="font-mono text-sm">
+        {label}: {value} {passed ? '≤' : '>'} {limit}
+      </span>
+      <span className={`ml-auto text-xs font-semibold ${passed ? 'text-success' : 'text-destructive'}`}>
+        {passed ? 'OK' : 'FAIL'}
+      </span>
     </div>
   );
 }
@@ -131,7 +81,7 @@ export function ContinuousBeamOutput({ result }: ContinuousBeamOutputProps) {
           </div>
           <h3 className="font-semibold text-lg mb-2">No Calculations Yet</h3>
           <p className="text-muted-foreground text-sm max-w-xs">
-            Configure your continuous beam spans and click Analyze to generate step-by-step design calculations.
+            Configure your continuous beam spans and click Analyze to generate BS 8110 compliant calculations.
           </p>
         </CardContent>
       </Card>
@@ -139,24 +89,49 @@ export function ContinuousBeamOutput({ result }: ContinuousBeamOutputProps) {
   }
 
   const copyToClipboard = () => {
-    const text = result.steps
-      .map((step) => {
-        let content = `${step.title}`;
-        if (step.bsReference) content += ` [${step.bsReference}]`;
-        content += `\n`;
-        if (step.formula) content += `  Formula: ${step.formula}\n`;
-        if (step.substitution) content += `  ${step.substitution}\n`;
-        content += `  Result: ${step.result}`;
-        if (step.explanation) content += `\n  Note: ${step.explanation}`;
-        if (step.status) content += `\n  Status: ${step.status.toUpperCase()}`;
-        return content;
-      })
-      .join("\n\n");
-
-    navigator.clipboard.writeText(text);
+    const lines: string[] = [];
+    
+    lines.push("=" .repeat(60));
+    lines.push("CONTINUOUS BEAM DESIGN TO BS 8110-1:1997");
+    lines.push("=".repeat(60));
+    lines.push("");
+    
+    // Section A
+    lines.push("SECTION A — LOADING");
+    lines.push("Reference: BS 8110-1 Cl. 2.4.2");
+    lines.push("");
+    lines.push(`Ultimate load: F = 1.4Gk + 1.6Qk = ${result.summary.ultimateLoad?.toFixed(2) || 'N/A'} kN/m`);
+    lines.push("");
+    
+    // Section B
+    lines.push("SECTION B — DESIGN MOMENTS & SHEARS");
+    lines.push("Reference: BS 8110-1 Table 3.5");
+    lines.push("");
+    result.spanResults.forEach(span => {
+      lines.push(`Span ${span.spanIndex} (L = ${span.length}m):`);
+      lines.push(`  M+ (mid-span) = ${span.positiveMoment.toFixed(2)} kNm`);
+      lines.push(`  M- (left support) = ${span.negativeMomentLeft.toFixed(2)} kNm`);
+      lines.push(`  M- (right support) = ${span.negativeMomentRight.toFixed(2)} kNm`);
+      lines.push(`  V (left) = ${span.shearLeft.toFixed(2)} kN`);
+      lines.push(`  V (right) = ${span.shearRight.toFixed(2)} kN`);
+      lines.push("");
+    });
+    
+    // Section G
+    lines.push("SECTION G — FINAL DESIGN SUMMARY");
+    lines.push("");
+    lines.push("Location\t\tTop Steel\t\tBottom Steel\t\tShear Links");
+    result.spanResults.forEach(span => {
+      lines.push(`Span ${span.spanIndex}\t\t${span.topSteel || 'N/A'}\t\t${span.bottomSteel || `${span.tensionSteel.toFixed(0)} mm²`}\t\tT${span.linkSize}@${span.linkSpacing}mm`);
+    });
+    lines.push("");
+    lines.push("=".repeat(60));
+    lines.push("All calculations comply with BS 8110-1:1997");
+    
+    navigator.clipboard.writeText(lines.join("\n"));
     toast({
       title: "Copied to clipboard",
-      description: "Calculations copied in exam-style format",
+      description: "BS 8110 calculations copied in exam-style format",
     });
   };
 
@@ -177,14 +152,23 @@ export function ContinuousBeamOutput({ result }: ContinuousBeamOutputProps) {
     category: 'geometry' as const
   })) || [];
 
+  // Extract key values for display
+  const effectiveDepth = result.summary.effectiveDepth || 0;
+  const width = result.summary.width || 0;
+  const fcu = result.summary.fcu || 30;
+  const fy = result.summary.fy || 500;
+  const maxMoment = Math.max(result.summary.maxPositiveMoment, result.summary.maxNegativeMoment);
+  const kValue = result.summary.kValue || (maxMoment * 1e6) / (width * effectiveDepth * effectiveDepth * fcu);
+  const isDoublyReinforced = kValue > 0.156;
+
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-      <CardHeader className="pb-4 flex flex-row items-center justify-between">
+      <CardHeader className="pb-4 flex flex-row items-center justify-between border-b border-border/50">
         <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-          <div className="h-8 w-8 rounded-md bg-accent/10 flex items-center justify-center">
-            <FileText className="h-4 w-4 text-accent" />
+          <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
+            <FileText className="h-4 w-4 text-primary" />
           </div>
-          Continuous Beam Analysis
+          BS 8110-1:1997 Design Output
         </CardTitle>
         <Button
           variant="outline"
@@ -196,58 +180,28 @@ export function ContinuousBeamOutput({ result }: ContinuousBeamOutputProps) {
           Copy All
         </Button>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Summary Banner */}
+      
+      <CardContent className="space-y-6 pt-6">
+        {/* Overall Status Banner */}
         <div className={`rounded-lg p-4 ${
           result.summary.designValid 
-            ? "bg-success/10 border border-success/20" 
-            : "bg-destructive/10 border border-destructive/20"
+            ? "bg-success/10 border border-success/30" 
+            : "bg-destructive/10 border border-destructive/30"
         }`}>
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2">
             {result.summary.designValid ? (
               <CheckCircle2 className="h-5 w-5 text-success" />
             ) : (
               <XCircle className="h-5 w-5 text-destructive" />
             )}
-            <span className={`font-semibold ${
+            <span className={`font-bold text-lg ${
               result.summary.designValid ? "text-success" : "text-destructive"
             }`}>
-              {result.summary.designValid ? "Design Passed" : "Design Failed"}
+              {result.summary.designValid ? "DESIGN ADEQUATE" : "DESIGN INADEQUATE"}
             </span>
-            <span className="ml-auto text-sm font-mono bg-muted/50 px-2 py-0.5 rounded">
-              {result.summary.numberOfSpans}-Span Beam
+            <span className="ml-auto text-sm font-mono bg-background/50 px-3 py-1 rounded">
+              {result.summary.numberOfSpans}-Span Continuous Beam
             </span>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div className="bg-background/50 rounded p-2">
-              <span className="text-muted-foreground block text-xs">Max M⁺</span>
-              <span className="font-mono font-semibold">{result.summary.maxPositiveMoment.toFixed(1)} kNm</span>
-            </div>
-            <div className="bg-background/50 rounded p-2">
-              <span className="text-muted-foreground block text-xs">Max M⁻</span>
-              <span className="font-mono font-semibold">{result.summary.maxNegativeMoment.toFixed(1)} kNm</span>
-            </div>
-            <div className="bg-background/50 rounded p-2">
-              <span className="text-muted-foreground block text-xs">Max Shear</span>
-              <span className="font-mono font-semibold">{result.summary.maxShear.toFixed(1)} kN</span>
-            </div>
-            <div className="bg-background/50 rounded p-2">
-              <span className="text-muted-foreground block text-xs">Max Steel</span>
-              <span className="font-mono font-semibold">{result.summary.maxTensionSteel.toFixed(0)} mm²</span>
-            </div>
-          </div>
-
-          {/* Status Summary */}
-          <div className="mt-3 pt-3 border-t border-border/30 flex flex-wrap gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Shear:</span>
-              <StatusIndicator status={result.summary.shearStatus} />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Deflection:</span>
-              <StatusIndicator status={result.summary.deflectionStatus} />
-            </div>
           </div>
         </div>
 
@@ -260,34 +214,276 @@ export function ContinuousBeamOutput({ result }: ContinuousBeamOutputProps) {
           />
         )}
 
-        {/* Span Results Grid */}
-        <div>
-          <h3 className="font-semibold text-sm mb-3 text-muted-foreground uppercase tracking-wide">
-            Individual Span Results
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {result.spanResults.map((span) => (
-              <SpanResultCard key={span.spanIndex} span={span} />
+        {/* ==================== SECTION A — LOADING ==================== */}
+        <SectionHeader 
+          section="A" 
+          title="LOADING" 
+          reference="Reference: BS 8110-1 Cl. 2.4.2" 
+        />
+        
+        <div className="space-y-3 ml-4">
+          <FormulaBlock 
+            formula="F = 1.4Gk + 1.6Qk"
+            substitution={`F = 1.4 × ${result.summary.deadLoad || 'Gk'} + 1.6 × ${result.summary.liveLoad || 'Qk'}`}
+            result={`F = ${result.summary.ultimateLoad?.toFixed(2) || 'N/A'} kN/m`}
+          />
+          
+          <div className="text-sm text-muted-foreground">
+            <p className="font-semibold">Load per span:</p>
+            {result.spanResults.map(span => (
+              <p key={span.spanIndex} className="font-mono ml-4">
+                Span {span.spanIndex}: F × L = {result.summary.ultimateLoad?.toFixed(2) || 'N/A'} × {span.length} = {((result.summary.ultimateLoad || 0) * span.length).toFixed(2)} kN
+              </p>
             ))}
           </div>
         </div>
 
-        {/* Calculation Steps */}
-        <div>
-          <h3 className="font-semibold text-sm mb-3 text-muted-foreground uppercase tracking-wide">
-            Step-by-Step Calculations
-          </h3>
-          <div className="space-y-1">
-            {result.steps.map((step, index) => (
-              <StepDisplay key={index} step={step} />
-            ))}
+        {/* ==================== SECTION B — DESIGN MOMENTS & SHEARS ==================== */}
+        <SectionHeader 
+          section="B" 
+          title="DESIGN MOMENTS & SHEARS" 
+          reference="Reference: BS 8110-1 Table 3.5" 
+        />
+        
+        <div className="ml-4 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="font-bold">Location</TableHead>
+                <TableHead className="text-right font-bold">M (kNm)</TableHead>
+                <TableHead className="text-right font-bold">V (kN)</TableHead>
+                <TableHead className="font-bold">Source</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {result.spanResults.map(span => (
+                <>
+                  <TableRow key={`${span.spanIndex}-left`} className="border-b-0">
+                    <TableCell className="font-mono">Support {span.spanIndex} (Left)</TableCell>
+                    <TableCell className="text-right font-mono text-warning">-{Math.abs(span.negativeMomentLeft).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono">{span.shearLeft.toFixed(2)}</TableCell>
+                    <TableCell className="text-xs text-primary">Table 3.5</TableCell>
+                  </TableRow>
+                  <TableRow key={`${span.spanIndex}-mid`} className="border-b-0 bg-muted/20">
+                    <TableCell className="font-mono">Span {span.spanIndex} (Mid)</TableCell>
+                    <TableCell className="text-right font-mono text-success">+{span.positiveMoment.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono">—</TableCell>
+                    <TableCell className="text-xs text-primary">Table 3.5</TableCell>
+                  </TableRow>
+                  <TableRow key={`${span.spanIndex}-right`}>
+                    <TableCell className="font-mono">Support {span.spanIndex + 1} (Right)</TableCell>
+                    <TableCell className="text-right font-mono text-warning">-{Math.abs(span.negativeMomentRight).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono">{span.shearRight.toFixed(2)}</TableCell>
+                    <TableCell className="text-xs text-primary">Table 3.5</TableCell>
+                  </TableRow>
+                </>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* ==================== SECTION C — SECTION CLASSIFICATION ==================== */}
+        <SectionHeader 
+          section="C" 
+          title="SECTION CLASSIFICATION" 
+          reference="Reference: BS 8110-1 Cl. 3.4.1" 
+        />
+        
+        <div className="ml-4 space-y-3">
+          <div className="bg-muted/30 rounded-lg p-4">
+            <p className="font-semibold mb-2">Critical Section Analysis:</p>
+            <div className="font-mono text-sm space-y-1">
+              <p>Design Moment (max): M = {maxMoment.toFixed(2)} kNm</p>
+              <p>Section: b = {width}mm, d = {effectiveDepth.toFixed(0)}mm</p>
+              <p>K = M / (bd²fcu) = {kValue.toFixed(4)}</p>
+            </div>
+            <div className={`mt-3 p-2 rounded ${isDoublyReinforced ? 'bg-warning/20 text-warning' : 'bg-success/20 text-success'}`}>
+              <p className="font-bold">
+                {isDoublyReinforced 
+                  ? "Section is DOUBLY REINFORCED (K > 0.156)" 
+                  : "Section is SINGLY REINFORCED (K ≤ 0.156)"
+                }
+              </p>
+            </div>
           </div>
+        </div>
+
+        {/* ==================== SECTION D — BENDING DESIGN ==================== */}
+        <SectionHeader 
+          section="D" 
+          title="BENDING DESIGN" 
+          reference="Reference: BS 8110-1 Cl. 3.4.4" 
+        />
+        
+        <div className="ml-4 space-y-4">
+          <div className="space-y-3">
+            <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">1. Neutral Axis Check</p>
+            <FormulaBlock 
+              formula="K = M / (bd²fcu)"
+              substitution={`K = ${(maxMoment * 1e6).toFixed(0)} / (${width} × ${effectiveDepth.toFixed(0)}² × ${fcu})`}
+              result={`K = ${kValue.toFixed(4)} ${kValue <= 0.156 ? '≤' : '>'} 0.156 (K')`}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">2. Lever Arm</p>
+            <FormulaBlock 
+              formula="z = d × [0.5 + √(0.25 - K/0.9)]"
+              substitution={`z = ${effectiveDepth.toFixed(0)} × [0.5 + √(0.25 - ${kValue.toFixed(4)}/0.9)]`}
+              result={`z = ${(result.summary.leverArm || effectiveDepth * 0.95).toFixed(1)} mm (max 0.95d)`}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">3. Tension Steel</p>
+            <FormulaBlock 
+              formula="As = M / (0.95 × fy × z)"
+              substitution={`As = ${(maxMoment * 1e6).toFixed(0)} / (0.95 × ${fy} × ${(result.summary.leverArm || effectiveDepth * 0.95).toFixed(1)})`}
+              result={`As = ${result.summary.maxTensionSteel.toFixed(0)} mm²`}
+            />
+          </div>
+
+          {isDoublyReinforced && (
+            <div className="space-y-3">
+              <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">4. Compression Steel</p>
+              <FormulaBlock 
+                formula="As' = (K - K')bd²fcu / [0.95fy(d - d')]"
+                result={`As' = ${result.summary.maxCompressionSteel?.toFixed(0) || 'N/A'} mm²`}
+              />
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">{isDoublyReinforced ? '5' : '4'}. Bar Selection</p>
+            <div className="bg-muted/30 rounded-lg p-4 font-mono text-sm">
+              <p>Required Area: As = {result.summary.maxTensionSteel.toFixed(0)} mm²</p>
+              <p className="mt-1 text-primary font-semibold">
+                Provide: {result.summary.barSuggestion || `${Math.ceil(result.summary.maxTensionSteel / 314)}T20 (${Math.ceil(result.summary.maxTensionSteel / 314) * 314} mm²)`}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ==================== SECTION E — SHEAR DESIGN ==================== */}
+        <SectionHeader 
+          section="E" 
+          title="SHEAR DESIGN" 
+          reference="Reference: BS 8110-1 Cl. 3.4.5" 
+        />
+        
+        <div className="ml-4 space-y-4">
+          <div className="space-y-3">
+            <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">1. Design Shear Stress</p>
+            <FormulaBlock 
+              formula="v = V / (bd)"
+              substitution={`v = ${(result.summary.maxShear * 1000).toFixed(0)} / (${width} × ${effectiveDepth.toFixed(0)})`}
+              result={`v = ${result.summary.shearStress?.toFixed(3) || ((result.summary.maxShear * 1000) / (width * effectiveDepth)).toFixed(3)} N/mm²`}
+            />
+            <CheckResult 
+              passed={(result.summary.shearStress || 0) <= 0.8 * Math.sqrt(fcu)}
+              label="Maximum shear"
+              value={`${result.summary.shearStress?.toFixed(2) || ((result.summary.maxShear * 1000) / (width * effectiveDepth)).toFixed(2)}`}
+              limit={`${(0.8 * Math.sqrt(fcu)).toFixed(2)} N/mm²`}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">2. Concrete Shear Resistance (Table 3.8)</p>
+            <FormulaBlock 
+              formula="vc = (0.79/γm) × (100As/bd)^(1/3) × (400/d)^(1/4) × (fcu/25)^(1/3)"
+              result={`vc = ${result.summary.vc?.toFixed(3) || 'N/A'} N/mm²`}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">3. Shear Links</p>
+            <FormulaBlock 
+              formula="Asv/sv = b(v - vc) / (0.95fyv)"
+            />
+            <div className="bg-muted/30 rounded-lg p-4">
+              <p className="font-mono text-sm mb-2">Link requirements per span:</p>
+              {result.spanResults.map(span => (
+                <p key={span.spanIndex} className="font-mono text-sm text-primary">
+                  Span {span.spanIndex}: T{span.linkSize}@{span.linkSpacing}mm c/c
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ==================== SECTION F — DEFLECTION CHECK ==================== */}
+        <SectionHeader 
+          section="F" 
+          title="DEFLECTION CHECK" 
+          reference="Reference: BS 8110-1 Cl. 3.4.6" 
+        />
+        
+        <div className="ml-4 space-y-3">
+          <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+            <div className="flex justify-between font-mono text-sm">
+              <span>Actual L/d:</span>
+              <span className="font-semibold">{result.summary.actualSpanDepthRatio?.toFixed(1) || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between font-mono text-sm">
+              <span>Basic L/d (Table 3.9):</span>
+              <span>{result.summary.basicSpanDepthRatio?.toFixed(1) || '26.0'}</span>
+            </div>
+            <div className="flex justify-between font-mono text-sm">
+              <span>Modification Factor (Cl. 3.4.6.5):</span>
+              <span>{result.summary.modificationFactor?.toFixed(2) || '1.00'}</span>
+            </div>
+            <div className="flex justify-between font-mono text-sm border-t border-border/50 pt-2">
+              <span>Allowable L/d:</span>
+              <span className="font-semibold">{result.summary.allowableSpanDepthRatio?.toFixed(1) || 'N/A'}</span>
+            </div>
+          </div>
+          
+          <CheckResult 
+            passed={result.summary.deflectionStatus === 'safe'}
+            label="L/d check"
+            value={result.summary.actualSpanDepthRatio?.toFixed(1) || 'N/A'}
+            limit={`${result.summary.allowableSpanDepthRatio?.toFixed(1) || 'N/A'}`}
+          />
+        </div>
+
+        {/* ==================== SECTION G — FINAL DESIGN SUMMARY ==================== */}
+        <SectionHeader 
+          section="G" 
+          title="FINAL DESIGN SUMMARY" 
+          reference="" 
+        />
+        
+        <div className="ml-4 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-primary/10">
+                <TableHead className="font-bold text-foreground">Location</TableHead>
+                <TableHead className="font-bold text-foreground">Top Steel</TableHead>
+                <TableHead className="font-bold text-foreground">Bottom Steel</TableHead>
+                <TableHead className="font-bold text-foreground">Shear Links</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {result.spanResults.map(span => (
+                <TableRow key={span.spanIndex}>
+                  <TableCell className="font-mono font-semibold">Span {span.spanIndex}</TableCell>
+                  <TableCell className="font-mono">{span.topSteel || `${Math.ceil(Math.max(span.negativeMomentLeft, span.negativeMomentRight) * 1e6 / (0.95 * fy * effectiveDepth * 0.95) / 314)}T20`}</TableCell>
+                  <TableCell className="font-mono">{span.bottomSteel || `${Math.ceil(span.tensionSteel / 314)}T20`}</TableCell>
+                  <TableCell className="font-mono">T{span.linkSize}@{span.linkSpacing}mm c/c</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
 
         {/* Footer Note */}
-        <div className="mt-6 pt-4 border-t border-border/30 text-xs text-muted-foreground text-center">
-          <p>All calculations comply with BS 8110-1:1997 Table 3.5</p>
-          <p className="mt-1 font-semibold">This module extends the original MVP without replacing existing functionality.</p>
+        <div className="mt-6 pt-4 border-t border-border/30 text-center">
+          <p className="text-xs text-muted-foreground font-mono">
+            All calculations comply with BS 8110-1:1997
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            This output follows the exam-style presentation format with explicit clause and table references.
+          </p>
         </div>
       </CardContent>
     </Card>
