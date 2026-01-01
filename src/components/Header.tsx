@@ -1,8 +1,19 @@
-import { Ruler, Grid3X3, GitBranch, HelpCircle } from "lucide-react";
+import { Ruler, Grid3X3, GitBranch, LogOut, User } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Header() {
   const location = useLocation();
+  const { user, isAdmin, signOut } = useAuth();
   
   const navItems = [
     { path: "/", label: "RC Beam", icon: Ruler },
@@ -41,9 +52,40 @@ export function Header() {
                 <span className="hidden sm:inline">{label}</span>
               </Link>
             ))}
+            
             <div className="w-px h-6 bg-border mx-2" />
+            
+            {/* User Menu */}
+            {user && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-2">
+                    <User className="h-4 w-4" />
+                    <span className="hidden sm:inline max-w-[100px] truncate">
+                      {user.email?.split('@')[0]}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium">{user.email}</p>
+                      {isAdmin && (
+                        <span className="text-xs text-primary font-semibold">Administrator</span>
+                      )}
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            
             <span className="px-2.5 py-1 rounded-md text-xs font-mono bg-muted text-muted-foreground">
-              v1.1
+              v1.2
             </span>
           </nav>
         </div>
