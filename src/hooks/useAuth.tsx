@@ -2,9 +2,23 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * SECURITY NOTE: The isAdmin flag in this context is for UX purposes only.
+ * It controls UI visibility (e.g., showing admin menus, enabling admin routes).
+ * 
+ * This is NOT a security control - all security-critical operations MUST verify
+ * admin status server-side via:
+ * - RLS policies using has_role(auth.uid(), 'admin')
+ * - Server-side checks in edge functions
+ * 
+ * The has_role() RPC is SECURITY DEFINER with proper search_path, preventing
+ * manipulation. Client-side state can be tampered with but won't bypass RLS.
+ */
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
+  /** UX-only flag for admin UI visibility. NOT a security control. */
   isAdmin: boolean;
   isLoading: boolean;
   signUp: (email: string, password: string, username: string) => Promise<{ error: Error | null }>;
@@ -17,6 +31,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  // NOTE: isAdmin is for UX only - server-side RLS enforces actual security
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
