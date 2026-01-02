@@ -1,35 +1,47 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Calculator, Lock, Mail, User } from 'lucide-react';
+import { Loader2, Calculator, Lock, Mail, User, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { z } from 'zod';
+import { Link } from 'react-router-dom';
 
 const emailSchema = z.string().email('Please enter a valid email address');
-const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
+const passwordSchema = z.string().min(8, 'Password must be at least 8 characters')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number');
 const usernameSchema = z.string().min(3, 'Username must be at least 3 characters').max(20, 'Username must be less than 20 characters');
 
 const Auth = () => {
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get('mode');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; username?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; username?: string; confirmPassword?: string; terms?: string }>({});
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(mode === 'reset');
   
-  const { signIn, signUp, user, isLoading } = useAuth();
+  const { signIn, signUp, resetPassword, updatePassword, user, isLoading, isLocked, lockoutUntil } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (user && !isLoading) {
+    if (user && !isLoading && mode !== 'reset') {
       navigate('/');
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isLoading, navigate, mode]);
 
   const validateLogin = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -39,9 +51,8 @@ const Auth = () => {
       newErrors.email = emailResult.error.errors[0].message;
     }
     
-    const passwordResult = passwordSchema.safeParse(password);
-    if (!passwordResult.success) {
-      newErrors.password = passwordResult.error.errors[0].message;
+    if (!password) {
+      newErrors.password = 'Password is required';
     }
     
     setErrors(newErrors);
@@ -49,7 +60,7 @@ const Auth = () => {
   };
 
   const validateSignup = () => {
-    const newErrors: { email?: string; password?: string; username?: string } = {};
+    const newErrors: { email?: string; password?: string; username?: string; terms?: string } = {};
     
     const usernameResult = usernameSchema.safeParse(username);
     if (!usernameResult.success) {
@@ -64,6 +75,26 @@ const Auth = () => {
     const passwordResult = passwordSchema.safeParse(password);
     if (!passwordResult.success) {
       newErrors.password = passwordResult.error.errors[0].message;
+    }
+
+    if (!acceptTerms) {
+      newErrors.terms = 'You must accept the terms and privacy policy';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validatePasswordReset = () => {
+    const newErrors: { password?: string; confirmPassword?: string } = {};
+    
+    const passwordResult = passwordSchema.safeParse(password);
+    if (!passwordResult.success) {
+      newErrors.password = passwordResult.error.errors[0].message;
+    }
+
+    if (password !== confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
     }
     
     setErrors(newErrors);
@@ -82,9 +113,7 @@ const Auth = () => {
       toast({
         variant: 'destructive',
         title: 'Login Failed',
-        description: error.message === 'Invalid login credentials' 
-          ? 'Invalid email or password. Please try again.'
-          : error.message
+        description: error.message
       });
     } else {
       toast({
@@ -122,10 +151,182 @@ const Auth = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
+      setErrors({ email: emailResult.error.errors[0].message });
+      return;
+    }
+    
+    setIsSubmitting(true);
+    const { error } = await resetPassword(email);
+    setIsSubmitting(false);
+    
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Reset Failed',
+        description: error.message
+      });
+    } else {
+      toast({
+        title: 'Check your email',
+        description: 'We sent you a password reset link.'
+      });
+      setShowForgotPassword(false);
+    }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validatePasswordReset()) return;
+    
+    setIsSubmitting(true);
+    const { error } = await updatePassword(password);
+    setIsSubmitting(false);
+    
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Reset Failed',
+        description: error.message
+      });
+    } else {
+      toast({
+        title: 'Password Updated',
+        description: 'Your password has been successfully updated.'
+      });
+      navigate('/');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Password Reset Form
+  if (showResetPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+              <Lock className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Reset Password</h1>
+            <p className="text-muted-foreground mt-2">Enter your new password</p>
+          </div>
+
+          <Card className="border-border/50 shadow-xl">
+            <form onSubmit={handlePasswordReset}>
+              <CardContent className="space-y-4 pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
+                </div>
+              </CardContent>
+
+              <CardFooter>
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Password'
+                  )}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Forgot Password Form
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+              <Mail className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Forgot Password?</h1>
+            <p className="text-muted-foreground mt-2">Enter your email to receive a reset link</p>
+          </div>
+
+          <Card className="border-border/50 shadow-xl">
+            <form onSubmit={handleForgotPassword}>
+              <CardContent className="space-y-4 pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                </div>
+              </CardContent>
+
+              <CardFooter className="flex-col gap-3">
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Reset Link'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => setShowForgotPassword(false)}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Login
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -141,6 +342,21 @@ const Auth = () => {
           <h1 className="text-2xl font-bold text-foreground">Structural Design Assistant</h1>
           <p className="text-muted-foreground mt-2">BS 8110 Calculation Engine</p>
         </div>
+
+        {/* Lockout Warning */}
+        {isLocked && lockoutUntil && (
+          <Card className="border-destructive/50 bg-destructive/5 mb-4">
+            <CardContent className="flex items-center gap-3 py-4">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              <div>
+                <p className="font-medium text-destructive">Account Locked</p>
+                <p className="text-sm text-muted-foreground">
+                  Too many failed attempts. Try again at {lockoutUntil.toLocaleTimeString()}.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-border/50 shadow-xl">
           <Tabs defaultValue="login" className="w-full">
@@ -165,13 +381,24 @@ const Auth = () => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="pl-10"
+                        disabled={isLocked}
                       />
                     </div>
                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="login-password">Password</Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="px-0 h-auto font-normal text-sm"
+                        onClick={() => setShowForgotPassword(true)}
+                      >
+                        Forgot password?
+                      </Button>
+                    </div>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -181,6 +408,7 @@ const Auth = () => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-10"
+                        disabled={isLocked}
                       />
                     </div>
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
@@ -188,7 +416,7 @@ const Auth = () => {
                 </CardContent>
                 
                 <CardFooter>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <Button type="submit" className="w-full" disabled={isSubmitting || isLocked}>
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -251,7 +479,33 @@ const Auth = () => {
                       />
                     </div>
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Must be 8+ characters with uppercase, lowercase, and number
+                    </p>
                   </div>
+
+                  <div className="flex items-start space-x-2">
+                    <Checkbox
+                      id="terms"
+                      checked={acceptTerms}
+                      onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
+                    />
+                    <div className="grid gap-1.5 leading-none">
+                      <label
+                        htmlFor="terms"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        Accept terms and conditions
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        By signing up, you agree to our{' '}
+                        <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>
+                        {' '}and{' '}
+                        <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+                      </p>
+                    </div>
+                  </div>
+                  {errors.terms && <p className="text-sm text-destructive">{errors.terms}</p>}
                 </CardContent>
                 
                 <CardFooter>
