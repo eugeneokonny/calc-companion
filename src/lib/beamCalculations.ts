@@ -26,21 +26,49 @@ export interface CalculationStep {
 export interface BeamResult {
   steps: CalculationStep[];
   summary: {
+    // Input values for display
+    span: number;
+    width: number;
+    overallDepth: number;
+    fcu: number;
+    fy: number;
+    deadLoad: number;
+    liveLoad: number;
+    cover: number;
+    // Calculated values
     effectiveDepth: number;
+    ultimateLoad: number;
     ultimateMoment: number;
+    shearForce: number;
+    criticalShear: number;
     kValue: number;
+    kPrime: number;
     leverArm: number;
     tensionSteel: number;
     compressionSteel: number;
-    shearForce: number;
-    shearStress: number;
     minSteel: number;
+    shearStress: number;
+    vc: number;
+    maxShearStress: number;
+    // Deflection values
+    basicSpanDepthRatio: number;
+    tensionModificationFactor: number;
+    compressionModificationFactor: number;
+    allowableSpanDepthRatio: number;
+    actualSpanDepthRatio: number;
+    // Status values
     isDoublyReinforced: boolean;
     designValid: boolean;
-    deflectionStatus?: 'safe' | 'unsafe';
-    shearStatus?: 'safe' | 'unsafe';
-    linkSize?: number;
-    linkSpacing?: number;
+    deflectionStatus: 'safe' | 'unsafe';
+    shearStatus: 'safe' | 'unsafe';
+    kCheckStatus: 'safe' | 'unsafe';
+    // Reinforcement
+    linkSize: number;
+    linkSpacing: number;
+    barSuggestion: string;
+    compressionBarSuggestion?: string;
+    // Failure tracking
+    failureReasons: string[];
   };
 }
 
@@ -99,8 +127,28 @@ function calculateLinkSpacing(v: number, vc: number, b: number, d: number, fy: n
   return { size: 12, spacing: 100 }; // Fallback
 }
 
+// Suggest bar configuration
+function suggestBars(area: number): string {
+  const options = [
+    { dia: 12, area: 113 },
+    { dia: 16, area: 201 },
+    { dia: 20, area: 314 },
+    { dia: 25, area: 491 },
+    { dia: 32, area: 804 }
+  ];
+  
+  for (const bar of options) {
+    const count = Math.ceil(area / bar.area);
+    if (count <= 4) {
+      return `${count}T${bar.dia} (${(count * bar.area).toFixed(0)} mm² provided)`;
+    }
+  }
+  return "Use 2 layers or larger bars";
+}
+
 export function calculateBeamDesign(input: BeamInput): BeamResult {
   const steps: CalculationStep[] = [];
+  const failureReasons: string[] = [];
   
   // Calculate effective depth: d = h - cover - φlink - φbar/2
   const effectiveDepth = input.overallDepth - input.cover - input.linkDiameter - input.mainBarDiameter / 2;
@@ -150,10 +198,12 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
     bsReference: "BS8110 Cl. 3.4.4.4"
   });
 
-  // Step 4: Check K vs K'
+  // Step 5: Check K vs K'
   const isDoublyReinforced = kValue > kPrime;
+  const kCheckStatus: 'safe' | 'unsafe' = kValue <= 0.225 ? 'safe' : 'unsafe';
+  
   steps.push({
-    title: "Step 4: Check Beam Type",
+    title: "Step 5: Check Beam Type",
     formula: "Compare K with K' = 0.156",
     substitution: `K = ${kValue.toFixed(4)} ${kValue <= kPrime ? "≤" : ">"} K' = 0.156`,
     result: isDoublyReinforced ? "Doubly Reinforced Beam Required" : "Singly Reinforced Beam",
@@ -164,6 +214,10 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
       ? "K > K': Compression reinforcement needed to resist excess moment"
       : "K ≤ K': Section adequate for singly reinforced design"
   });
+
+  if (kValue > 0.225) {
+    failureReasons.push("K value exceeds maximum limit (0.225) - section is inadequate");
+  }
 
   // Step 6: Lever Arm
   const kForZ = isDoublyReinforced ? kPrime : kValue;
@@ -179,9 +233,10 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
     bsReference: "BS8110 Cl. 3.4.4.4"
   });
 
-  // Step 7: Tension Steel Area
+  // Step 7: Steel Area Calculation
   let tensionSteel: number;
   let compressionSteel = 0;
+  let compressionBarSuggestion: string | undefined;
   
   if (isDoublyReinforced) {
     const MLimit = kPrime * input.width * Math.pow(effectiveDepth, 2) * input.fcu;
@@ -190,6 +245,7 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
     
     compressionSteel = excessMoment / (0.87 * input.fy * (effectiveDepth - dPrime));
     tensionSteel = (MLimit / (0.87 * input.fy * leverArm)) + compressionSteel;
+    compressionBarSuggestion = suggestBars(compressionSteel);
     
     steps.push({
       title: "Step 7a: Limiting Moment",
@@ -215,7 +271,7 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
     tensionSteel = M_Nmm / (0.87 * input.fy * leverArm);
     
     steps.push({
-      title: "Step 6: Tension Steel Area",
+      title: "Step 7: Tension Steel Area",
       formula: "As = M / (0.87fy·z)",
       substitution: `As = ${ultimateMoment.toFixed(2)} × 10⁶ / (0.87 × ${input.fy} × ${leverArm.toFixed(1)})`,
       result: `As = ${tensionSteel.toFixed(0)} mm²`,
@@ -243,6 +299,7 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
   });
 
   const finalTensionSteel = Math.max(tensionSteel, minSteel);
+  const barSuggestion = suggestBars(finalTensionSteel);
 
   // Step 9: Shear Force
   const shearForce = (ultimateLoad * input.span) / 2;
@@ -267,7 +324,7 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
   // Step 11: Shear Stress
   const shearStress = (criticalShear * 1000) / (input.width * effectiveDepth);
   const vc = calculateVc(finalTensionSteel, input.width, effectiveDepth, input.fcu);
-  const maxShear = Math.min(0.8 * Math.sqrt(input.fcu), 5);
+  const maxShearStress = Math.min(0.8 * Math.sqrt(input.fcu), 5);
   
   steps.push({
     title: "Step 11: Shear Stress Check",
@@ -275,14 +332,18 @@ export function calculateBeamDesign(input: BeamInput): BeamResult {
     substitution: `v = ${(criticalShear * 1000).toFixed(0)} / (${input.width} × ${effectiveDepth.toFixed(0)})`,
     result: `v = ${shearStress.toFixed(2)} N/mm²
 vc = ${vc.toFixed(2)} N/mm² (permissible)
-vmax = ${maxShear.toFixed(2)} N/mm²`,
+vmax = ${maxShearStress.toFixed(2)} N/mm²`,
     isCheck: true,
-    checkPassed: shearStress < maxShear,
-    status: shearStress < maxShear ? (shearStress <= vc ? 'safe' : 'review') : 'unsafe',
+    checkPassed: shearStress < maxShearStress,
+    status: shearStress < maxShearStress ? (shearStress <= vc ? 'safe' : 'review') : 'unsafe',
     bsReference: "BS8110 Cl. 3.4.5"
   });
 
-  const shearStatus: 'safe' | 'unsafe' = shearStress < maxShear ? 'safe' : 'unsafe';
+  const shearStatus: 'safe' | 'unsafe' = shearStress < maxShearStress ? 'safe' : 'unsafe';
+  
+  if (shearStatus === 'unsafe') {
+    failureReasons.push(`Shear stress (${shearStress.toFixed(2)} N/mm²) exceeds maximum (${maxShearStress.toFixed(2)} N/mm²)`);
+  }
 
   // Step 12: Shear Reinforcement Design
   let linkSize = input.linkDiameter;
@@ -337,53 +398,67 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
   });
 
   const deflectionStatus: 'safe' | 'unsafe' = deflectionOK ? 'safe' : 'unsafe';
+  
+  if (!deflectionOK) {
+    failureReasons.push(`Deflection check failed: L/d = ${actualRatio.toFixed(1)} > ${allowableRatio.toFixed(1)}`);
+  }
 
   // Step 14: Bar Selection
-  const suggestBars = (area: number): string => {
-    const options = [
-      { dia: 12, area: 113 },
-      { dia: 16, area: 201 },
-      { dia: 20, area: 314 },
-      { dia: 25, area: 491 },
-      { dia: 32, area: 804 }
-    ];
-    
-    for (const bar of options) {
-      const count = Math.ceil(area / bar.area);
-      if (count <= 4) {
-        return `${count}T${bar.dia} (${(count * bar.area).toFixed(0)} mm² provided)`;
-      }
-    }
-    return "Use 2 layers or larger bars";
-  };
-
   steps.push({
     title: "Step 14: Reinforcement Selection",
-    result: `Tension: ${suggestBars(finalTensionSteel)}${compressionSteel > 0 ? `\nCompression: ${suggestBars(compressionSteel)}` : ''}
+    result: `Tension: ${barSuggestion}${compressionSteel > 0 ? `\nCompression: ${compressionBarSuggestion}` : ''}
 Links: T${linkSize}@${linkSpacing}mm c/c`,
     explanation: "Select bars to provide area ≥ As required"
   });
 
-  const designValid = steelOK && shearStatus === 'safe' && deflectionStatus === 'safe';
+  const designValid = kCheckStatus === 'safe' && shearStatus === 'safe' && deflectionStatus === 'safe';
 
   return {
     steps,
     summary: {
+      // Input values
+      span: input.span,
+      width: input.width,
+      overallDepth: input.overallDepth,
+      fcu: input.fcu,
+      fy: input.fy,
+      deadLoad: input.deadLoad,
+      liveLoad: input.liveLoad,
+      cover: input.cover,
+      // Calculated values
       effectiveDepth,
+      ultimateLoad,
       ultimateMoment,
+      shearForce,
+      criticalShear,
       kValue,
+      kPrime,
       leverArm,
       tensionSteel: finalTensionSteel,
       compressionSteel,
-      shearForce,
-      shearStress,
       minSteel,
+      shearStress,
+      vc,
+      maxShearStress,
+      // Deflection values
+      basicSpanDepthRatio: basicRatio,
+      tensionModificationFactor: tensionMod,
+      compressionModificationFactor: compMod,
+      allowableSpanDepthRatio: allowableRatio,
+      actualSpanDepthRatio: actualRatio,
+      // Status values
       isDoublyReinforced,
       designValid,
       deflectionStatus,
       shearStatus,
+      kCheckStatus,
+      // Reinforcement
       linkSize,
-      linkSpacing
+      linkSpacing,
+      barSuggestion,
+      compressionBarSuggestion,
+      // Failures
+      failureReasons
     }
   };
 }

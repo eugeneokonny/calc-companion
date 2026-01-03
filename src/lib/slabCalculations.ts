@@ -33,23 +33,65 @@ export interface CalculationStep {
 export interface SlabResult {
   steps: CalculationStep[];
   summary: {
+    // Input values
     slabType: string;
     panelType: string;
+    shortSpan: number;
+    longSpan: number;
+    thickness: number;
+    fcu: number;
+    fy: number;
+    deadLoad: number;
+    liveLoad: number;
+    cover: number;
+    supportCondition: string;
+    shortEdgeContinuity: string;
+    longEdgeContinuity: string;
+    // Calculated values
+    spanRatio: number;
     ultimateLoad: number;
+    effectiveDepthShort: number;
+    effectiveDepthLong?: number;
+    // Moment values
     shortSpanMoment: number;
     longSpanMoment?: number;
     negativeShortMoment?: number;
     negativeLongMoment?: number;
+    // Moment coefficients
+    bsx_pos?: number;
+    bsx_neg?: number;
+    bsy_pos?: number;
+    bsy_neg?: number;
+    tableName?: string;
+    // K values
+    kShort: number;
+    kLong?: number;
+    kPrime: number;
+    // Lever arms
+    zShort: number;
+    zLong?: number;
+    // Steel areas
     shortSpanSteel: number;
     longSpanSteel?: number;
-    effectiveDepthShort: number;
-    effectiveDepthLong?: number;
-    shearStress?: number;
-    permissibleShear?: number;
-    shearStatus?: 'safe' | 'unsafe';
-    deflectionStatus?: 'safe' | 'unsafe';
+    minSteel: number;
+    shortSpanBarSuggestion: string;
+    longSpanBarSuggestion?: string;
+    // Shear values
+    shearForce: number;
+    shearStress: number;
+    permissibleShear: number;
+    // Deflection values
+    basicSpanDepthRatio: number;
+    tensionModificationFactor: number;
+    allowableSpanDepthRatio: number;
+    actualSpanDepthRatio: number;
+    // Status values
+    shearStatus: 'safe' | 'unsafe';
+    deflectionStatus: 'safe' | 'unsafe';
+    kStatus: 'safe' | 'unsafe';
     designValid: boolean;
-    spanRatio?: number;
+    // Failure tracking
+    failureReasons: string[];
   };
 }
 
@@ -137,7 +179,6 @@ function getTableCoefficients(
   let table: Record<number, { bsx_neg: number; bsx_pos: number; bsy_neg: number; bsy_pos: number }>;
   let tableName: string;
   
-  // Select appropriate table based on panel type and continuity
   if (panelType === 'interior' || (shortEdgeCont === 'continuous' && longEdgeCont === 'continuous')) {
     table = twoWayInterior;
     tableName = 'Table 3.14 - Interior Panel (All edges continuous)';
@@ -181,10 +222,10 @@ function getSimplySupported(spanRatio: number): { msx: number; msy: number } {
 // One-way slab moment coefficients (BS8110 Table 3.10)
 function getOneWayMomentCoefficient(support: string): { positive: number; negative: number } {
   switch (support) {
-    case 'simply-supported': return { positive: 0.125, negative: 0 }; // wL²/8
-    case 'continuous-one-end': return { positive: 0.090, negative: 0.090 }; // wL²/11
-    case 'continuous-both-ends': return { positive: 0.063, negative: 0.083 }; // wL²/16 mid, wL²/12 support
-    case 'cantilever': return { positive: 0, negative: 0.500 }; // wL²/2
+    case 'simply-supported': return { positive: 0.125, negative: 0 };
+    case 'continuous-one-end': return { positive: 0.090, negative: 0.090 };
+    case 'continuous-both-ends': return { positive: 0.063, negative: 0.083 };
+    case 'cantilever': return { positive: 0, negative: 0.500 };
     default: return { positive: 0.125, negative: 0 };
   }
 }
@@ -202,7 +243,7 @@ function getBasicSpanDepthRatio(supportCondition: string): number {
 
 // Calculate tension reinforcement modification factor (BS8110 Cl. 3.4.6.5)
 function getTensionModificationFactor(M: number, b: number, d: number, fy: number): number {
-  const fs = (2 * fy * M) / (3 * b * d * d); // Approximate service stress
+  const fs = (2 * fy * M) / (3 * b * d * d);
   const factor = 0.55 + (477 - fs) / (120 * (0.9 + M / (b * d * d)));
   return Math.min(Math.max(factor, 0.55), 2.0);
 }
@@ -215,20 +256,42 @@ function calculateVc(As: number, b: number, d: number, fcu: number): number {
   return (0.79 * Math.pow(ratio, 1/3) * Math.max(depthFactor, 0.67) * Math.min(fcuFactor, 1.0)) / 1.25;
 }
 
+// Suggest bar configuration for slabs
+function suggestBars(area: number): string {
+  const options = [
+    { dia: 8, spacing: 150, area: 335 },
+    { dia: 8, spacing: 200, area: 251 },
+    { dia: 10, spacing: 150, area: 524 },
+    { dia: 10, spacing: 200, area: 393 },
+    { dia: 10, spacing: 250, area: 314 },
+    { dia: 12, spacing: 150, area: 754 },
+    { dia: 12, spacing: 200, area: 566 },
+    { dia: 12, spacing: 250, area: 452 },
+    { dia: 16, spacing: 150, area: 1340 },
+    { dia: 16, spacing: 200, area: 1005 },
+  ];
+  
+  for (const opt of options) {
+    if (opt.area >= area) {
+      return `T${opt.dia}@${opt.spacing}mm c/c (${opt.area} mm²/m)`;
+    }
+  }
+  return "T16@125mm c/c or use larger bars";
+}
+
 export function calculateSlabDesign(input: SlabInput): SlabResult {
   const steps: CalculationStep[] = [];
+  const failureReasons: string[] = [];
   const gamma_dead = 1.4;
   const gamma_live = 1.6;
-  const gamma_c = 1.5;
-  const gamma_s = 1.15;
   const K_prime = 0.156;
 
   // Assume 10mm bars for effective depth calculation
   const barDiameter = 10;
   const effectiveDepthShort = input.slabThickness - input.cover - barDiameter / 2;
-  const effectiveDepthLong = effectiveDepthShort - barDiameter; // Second layer
+  const effectiveDepthLong = effectiveDepthShort - barDiameter;
 
-  // STEP 0: Slab Declaration (MANDATORY)
+  // Span ratio and slab type determination
   const spanRatio = input.longSpan / input.shortSpan;
   const actualSlabType = spanRatio > 2 ? 'one-way' : input.slabType;
   
@@ -238,7 +301,8 @@ export function calculateSlabDesign(input: SlabInput): SlabResult {
     'corner': 'Corner Panel',
     'cantilever': 'Cantilever Panel'
   };
-  
+
+  // STEP 0: Slab Declaration
   steps.push({
     title: "SLAB DECLARATION",
     result: `Type: ${actualSlabType === 'one-way' ? 'ONE-WAY SLAB' : 'TWO-WAY SLAB'}
@@ -283,23 +347,38 @@ d (long span) = ${effectiveDepthLong.toFixed(0)} mm (second layer)`,
     bsReference: 'BS8110 Cl. 3.4.4.1'
   });
 
-  let shortSpanMoment: number;
+  let shortSpanMoment: number = 0;
   let longSpanMoment: number | undefined;
   let negativeShortMoment: number | undefined;
   let negativeLongMoment: number | undefined;
-  let shortSpanSteel: number;
+  let shortSpanSteel: number = 0;
   let longSpanSteel: number | undefined;
+  let kShort: number = 0;
+  let kLong: number | undefined;
+  let zShort: number = 0;
+  let zLong: number | undefined;
+  let bsx_pos: number | undefined;
+  let bsx_neg: number | undefined;
+  let bsy_pos: number | undefined;
+  let bsy_neg: number | undefined;
+  let tableName: string | undefined;
   let designValid = true;
   let shearStatus: 'safe' | 'unsafe' = 'safe';
   let deflectionStatus: 'safe' | 'unsafe' = 'safe';
+  let kStatus: 'safe' | 'unsafe' = 'safe';
+  let shearForce = 0;
   let shearStress = 0;
   let permissibleShear = 0;
+  const minSteel = 0.0013 * 1000 * input.slabThickness;
+  const basicRatio = getBasicSpanDepthRatio(input.supportCondition);
 
   if (actualSlabType === 'one-way') {
-    // ONE-WAY SLAB DESIGN (BS8110 Table 3.10)
+    // ONE-WAY SLAB DESIGN
     const coeffs = getOneWayMomentCoefficient(input.supportCondition);
+    bsx_pos = coeffs.positive;
+    bsx_neg = coeffs.negative;
+    tableName = 'Table 3.10';
     
-    // Step 4: Moment Coefficients
     steps.push({
       title: "Step 4: Moment Coefficients (One-Way Slab)",
       formula: "Coefficients from BS8110 Table 3.10",
@@ -308,7 +387,6 @@ Negative moment coefficient: ${coeffs.negative}`,
       bsReference: 'BS8110 Table 3.10'
     });
 
-    // Step 5: Design Moments
     shortSpanMoment = coeffs.positive * ultimateLoad * Math.pow(input.shortSpan, 2);
     negativeShortMoment = coeffs.negative * ultimateLoad * Math.pow(input.shortSpan, 2);
     
@@ -321,50 +399,48 @@ M⁻ = ${coeffs.negative} × ${ultimateLoad.toFixed(2)} × ${input.shortSpan}²`
 M⁻ (support) = ${negativeShortMoment.toFixed(2)} kNm/m`
     });
 
-    // Step 6: K-value check
     const M_Nmm = shortSpanMoment * 1e6;
-    const b = 1000;
-    const K = M_Nmm / (b * Math.pow(effectiveDepthShort, 2) * input.fcu);
+    kShort = M_Nmm / (1000 * Math.pow(effectiveDepthShort, 2) * input.fcu);
+    kStatus = kShort <= K_prime ? 'safe' : 'unsafe';
     
     steps.push({
       title: "Step 6: K-value Check",
       formula: "K = M / (bd²fcu)",
       substitution: `K = ${(M_Nmm / 1e6).toFixed(2)} × 10⁶ / (1000 × ${effectiveDepthShort.toFixed(0)}² × ${input.fcu})`,
-      result: `K = ${K.toFixed(4)}`,
+      result: `K = ${kShort.toFixed(4)}`,
       isCheck: true,
-      checkPassed: K <= K_prime,
-      status: K <= K_prime ? 'safe' : 'unsafe',
-      explanation: K <= K_prime 
-        ? `K = ${K.toFixed(4)} < K' = ${K_prime} → Singly reinforced`
-        : `K = ${K.toFixed(4)} > K' = ${K_prime} → Increase depth`,
+      checkPassed: kStatus === 'safe',
+      status: kStatus,
+      explanation: kStatus === 'safe' 
+        ? `K = ${kShort.toFixed(4)} < K' = ${K_prime} → Singly reinforced`
+        : `K = ${kShort.toFixed(4)} > K' = ${K_prime} → Increase depth`,
       bsReference: 'BS8110 Cl. 3.4.4.4'
     });
 
-    if (K > K_prime) designValid = false;
+    if (kStatus === 'unsafe') {
+      designValid = false;
+      failureReasons.push(`K value (${kShort.toFixed(4)}) exceeds K' (${K_prime}) - section inadequate`);
+    }
 
-    // Step 7: Lever Arm
-    const z = Math.min(effectiveDepthShort * (0.5 + Math.sqrt(0.25 - K / 0.9)), 0.95 * effectiveDepthShort);
+    zShort = Math.min(effectiveDepthShort * (0.5 + Math.sqrt(0.25 - kShort / 0.9)), 0.95 * effectiveDepthShort);
     
     steps.push({
       title: "Step 7: Lever Arm",
       formula: "z = d(0.5 + √(0.25 - K/0.9)) ≤ 0.95d",
-      result: `z = ${z.toFixed(1)} mm`,
+      result: `z = ${zShort.toFixed(1)} mm`,
       bsReference: 'BS8110 Cl. 3.4.4.4'
     });
 
-    // Step 8: Required Reinforcement
-    shortSpanSteel = M_Nmm / (0.87 * input.fy * z);
+    shortSpanSteel = M_Nmm / (0.87 * input.fy * zShort);
     
     steps.push({
       title: "Step 8: Required Steel Area",
       formula: "As = M / (0.87fy × z)",
-      substitution: `As = ${(M_Nmm / 1e6).toFixed(2)} × 10⁶ / (0.87 × ${input.fy} × ${z.toFixed(1)})`,
+      substitution: `As = ${(M_Nmm / 1e6).toFixed(2)} × 10⁶ / (0.87 × ${input.fy} × ${zShort.toFixed(1)})`,
       result: `As = ${shortSpanSteel.toFixed(0)} mm²/m`,
       bsReference: 'BS8110 Cl. 3.4.4.4'
     });
 
-    // Step 9: Minimum Steel Check
-    const minSteel = 0.0013 * 1000 * input.slabThickness;
     const steelOK = shortSpanSteel >= minSteel;
     
     steps.push({
@@ -382,11 +458,9 @@ M⁻ (support) = ${negativeShortMoment.toFixed(2)} kNm/m`
     });
 
     shortSpanSteel = Math.max(shortSpanSteel, minSteel);
-    const distSteel = minSteel;
-    longSpanSteel = distSteel;
+    longSpanSteel = minSteel; // Distribution steel
 
-    // Step 10: Shear Check
-    const shearForce = 0.5 * ultimateLoad * input.shortSpan;
+    shearForce = 0.5 * ultimateLoad * input.shortSpan;
     shearStress = (shearForce * 1000) / (1000 * effectiveDepthShort);
     permissibleShear = calculateVc(shortSpanSteel, 1000, effectiveDepthShort, input.fcu);
     shearStatus = shearStress <= permissibleShear ? 'safe' : 'unsafe';
@@ -407,10 +481,11 @@ vc = ${permissibleShear.toFixed(3)} N/mm²`,
       bsReference: 'BS8110 Cl. 3.4.5'
     });
 
-    if (shearStatus === 'unsafe') designValid = false;
+    if (shearStatus === 'unsafe') {
+      designValid = false;
+      failureReasons.push(`Shear stress (${shearStress.toFixed(3)} N/mm²) exceeds vc (${permissibleShear.toFixed(3)} N/mm²)`);
+    }
 
-    // Step 11: Deflection Check
-    const basicRatio = getBasicSpanDepthRatio(input.supportCondition);
     const tensionMod = getTensionModificationFactor(shortSpanMoment * 1e6, 1000, effectiveDepthShort, input.fy);
     const allowableRatio = basicRatio * tensionMod;
     const actualRatio = (input.shortSpan * 1000) / effectiveDepthShort;
@@ -433,11 +508,13 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
       bsReference: 'BS8110 Cl. 3.4.6'
     });
 
-    if (deflectionStatus === 'unsafe') designValid = false;
+    if (deflectionStatus === 'unsafe') {
+      designValid = false;
+      failureReasons.push(`Deflection check failed: L/d = ${actualRatio.toFixed(1)} > ${allowableRatio.toFixed(1)}`);
+    }
 
-    // Step 12: Reinforcement Provision
     const mainBars = suggestBars(shortSpanSteel);
-    const distBars = suggestBars(distSteel);
+    const distBars = suggestBars(minSteel);
     
     steps.push({
       title: "Step 12: Reinforcement Provision",
@@ -445,19 +522,62 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
 Distribution Steel: ${distBars}`
     });
 
+    return {
+      steps,
+      summary: {
+        slabType: 'One-Way Slab',
+        panelType: panelTypeLabels[input.panelType],
+        shortSpan: input.shortSpan,
+        longSpan: input.longSpan,
+        thickness: input.slabThickness,
+        fcu: input.fcu,
+        fy: input.fy,
+        deadLoad: input.deadLoad,
+        liveLoad: input.liveLoad,
+        cover: input.cover,
+        supportCondition: input.supportCondition,
+        shortEdgeContinuity: input.shortEdgeContinuity,
+        longEdgeContinuity: input.longEdgeContinuity,
+        spanRatio,
+        ultimateLoad,
+        effectiveDepthShort,
+        shortSpanMoment,
+        negativeShortMoment,
+        bsx_pos,
+        bsx_neg,
+        tableName,
+        kShort,
+        kPrime: K_prime,
+        zShort,
+        shortSpanSteel,
+        longSpanSteel,
+        minSteel,
+        shortSpanBarSuggestion: mainBars,
+        longSpanBarSuggestion: distBars,
+        shearForce,
+        shearStress,
+        permissibleShear,
+        basicSpanDepthRatio: basicRatio,
+        tensionModificationFactor: getTensionModificationFactor(shortSpanMoment * 1e6, 1000, effectiveDepthShort, input.fy),
+        allowableSpanDepthRatio: allowableRatio,
+        actualSpanDepthRatio: actualRatio,
+        shearStatus,
+        deflectionStatus,
+        kStatus,
+        designValid,
+        failureReasons
+      }
+    };
+
   } else {
-    // TWO-WAY SLAB DESIGN (BS8110 Tables 3.14 & 3.15)
-    
-    // Step 4: Slab Declaration
+    // TWO-WAY SLAB DESIGN
     steps.push({
       title: "Step 4: Two-Way Slab Declaration",
       result: `This slab is designed as a ${panelTypeLabels[input.panelType].toLowerCase()} in accordance with BS 8110 Tables 3.14 and 3.15.`,
       status: 'safe'
     });
 
-    // Step 5: Moment Coefficients
     let coeffs: { bsx_neg: number; bsx_pos: number; bsy_neg: number; bsy_pos: number };
-    let tableName: string;
 
     if (input.supportCondition === 'simply-supported') {
       const ssCoeffs = getSimplySupported(spanRatio);
@@ -468,6 +588,11 @@ Distribution Steel: ${distBars}`
       coeffs = tableCoeffs;
       tableName = tableCoeffs.tableName;
     }
+
+    bsx_pos = coeffs.bsx_pos;
+    bsx_neg = coeffs.bsx_neg;
+    bsy_pos = coeffs.bsy_pos;
+    bsy_neg = coeffs.bsy_neg;
 
     steps.push({
       title: "Step 5: Moment Coefficients",
@@ -480,7 +605,6 @@ Distribution Steel: ${distBars}`
       bsReference: 'BS8110 Table 3.14'
     });
 
-    // Step 6: Design Moments
     shortSpanMoment = coeffs.bsx_pos * ultimateLoad * Math.pow(input.shortSpan, 2);
     negativeShortMoment = coeffs.bsx_neg * ultimateLoad * Math.pow(input.shortSpan, 2);
     longSpanMoment = coeffs.bsy_pos * ultimateLoad * Math.pow(input.shortSpan, 2);
@@ -499,85 +623,85 @@ Msy⁺ = ${longSpanMoment.toFixed(2)} kNm/m
 Msy⁻ = ${negativeLongMoment.toFixed(2)} kNm/m`
     });
 
-    // Step 7: K-value Check (Short Span - governs)
     const M_short_Nmm = shortSpanMoment * 1e6;
-    const K_short = M_short_Nmm / (1000 * Math.pow(effectiveDepthShort, 2) * input.fcu);
+    kShort = M_short_Nmm / (1000 * Math.pow(effectiveDepthShort, 2) * input.fcu);
     
     steps.push({
       title: "Step 7: K-value Check - Short Span",
       formula: "K = M / (bd²fcu)",
       substitution: `K = ${shortSpanMoment.toFixed(2)} × 10⁶ / (1000 × ${effectiveDepthShort.toFixed(0)}² × ${input.fcu})`,
-      result: `Ksx = ${K_short.toFixed(4)}`,
+      result: `Ksx = ${kShort.toFixed(4)}`,
       isCheck: true,
-      checkPassed: K_short <= K_prime,
-      status: K_short <= K_prime ? 'safe' : 'unsafe',
-      explanation: K_short <= K_prime 
+      checkPassed: kShort <= K_prime,
+      status: kShort <= K_prime ? 'safe' : 'unsafe',
+      explanation: kShort <= K_prime 
         ? `K < K' = ${K_prime} → Singly reinforced ✓`
         : `K > K' → Increase depth`,
       bsReference: 'BS8110 Cl. 3.4.4.4'
     });
 
-    if (K_short > K_prime) designValid = false;
+    if (kShort > K_prime) {
+      designValid = false;
+      kStatus = 'unsafe';
+      failureReasons.push(`Short span K value (${kShort.toFixed(4)}) exceeds K' (${K_prime})`);
+    }
 
-    // Step 8: Lever Arm - Short Span
-    const z_short = Math.min(effectiveDepthShort * (0.5 + Math.sqrt(0.25 - K_short / 0.9)), 0.95 * effectiveDepthShort);
+    zShort = Math.min(effectiveDepthShort * (0.5 + Math.sqrt(0.25 - kShort / 0.9)), 0.95 * effectiveDepthShort);
     
     steps.push({
       title: "Step 8: Lever Arm - Short Span",
       formula: "z = d(0.5 + √(0.25 - K/0.9)) ≤ 0.95d",
-      result: `zsx = ${z_short.toFixed(1)} mm`,
+      result: `zsx = ${zShort.toFixed(1)} mm`,
       bsReference: 'BS8110 Cl. 3.4.4.4'
     });
 
-    // Step 9: Reinforcement - Short Span
-    shortSpanSteel = M_short_Nmm / (0.87 * input.fy * z_short);
+    shortSpanSteel = M_short_Nmm / (0.87 * input.fy * zShort);
     
     steps.push({
       title: "Step 9: Steel Area - Short Span",
       formula: "Asx = Msx / (0.87fy × z)",
-      substitution: `Asx = ${shortSpanMoment.toFixed(2)} × 10⁶ / (0.87 × ${input.fy} × ${z_short.toFixed(1)})`,
+      substitution: `Asx = ${shortSpanMoment.toFixed(2)} × 10⁶ / (0.87 × ${input.fy} × ${zShort.toFixed(1)})`,
       result: `Asx = ${shortSpanSteel.toFixed(0)} mm²/m`,
       bsReference: 'BS8110 Cl. 3.4.4.4'
     });
 
-    // Step 10: K-value Check - Long Span
     const M_long_Nmm = longSpanMoment * 1e6;
-    const K_long = M_long_Nmm / (1000 * Math.pow(effectiveDepthLong, 2) * input.fcu);
+    kLong = M_long_Nmm / (1000 * Math.pow(effectiveDepthLong, 2) * input.fcu);
     
     steps.push({
       title: "Step 10: K-value Check - Long Span",
       formula: "K = M / (bd²fcu)",
       substitution: `K = ${longSpanMoment.toFixed(2)} × 10⁶ / (1000 × ${effectiveDepthLong.toFixed(0)}² × ${input.fcu})`,
-      result: `Ksy = ${K_long.toFixed(4)}`,
+      result: `Ksy = ${kLong.toFixed(4)}`,
       isCheck: true,
-      checkPassed: K_long <= K_prime,
-      status: K_long <= K_prime ? 'safe' : 'unsafe',
+      checkPassed: kLong <= K_prime,
+      status: kLong <= K_prime ? 'safe' : 'unsafe',
       bsReference: 'BS8110 Cl. 3.4.4.4'
     });
 
-    if (K_long > K_prime) designValid = false;
+    if (kLong > K_prime) {
+      designValid = false;
+      kStatus = 'unsafe';
+      failureReasons.push(`Long span K value (${kLong.toFixed(4)}) exceeds K' (${K_prime})`);
+    }
 
-    // Step 11: Lever Arm - Long Span
-    const z_long = Math.min(effectiveDepthLong * (0.5 + Math.sqrt(0.25 - K_long / 0.9)), 0.95 * effectiveDepthLong);
+    zLong = Math.min(effectiveDepthLong * (0.5 + Math.sqrt(0.25 - kLong / 0.9)), 0.95 * effectiveDepthLong);
     
     steps.push({
       title: "Step 11: Lever Arm - Long Span",
       formula: "z = d(0.5 + √(0.25 - K/0.9)) ≤ 0.95d",
-      result: `zsy = ${z_long.toFixed(1)} mm`
+      result: `zsy = ${zLong.toFixed(1)} mm`
     });
 
-    // Step 12: Reinforcement - Long Span
-    longSpanSteel = M_long_Nmm / (0.87 * input.fy * z_long);
+    longSpanSteel = M_long_Nmm / (0.87 * input.fy * zLong);
     
     steps.push({
       title: "Step 12: Steel Area - Long Span",
       formula: "Asy = Msy / (0.87fy × z)",
-      substitution: `Asy = ${longSpanMoment.toFixed(2)} × 10⁶ / (0.87 × ${input.fy} × ${z_long.toFixed(1)})`,
+      substitution: `Asy = ${longSpanMoment.toFixed(2)} × 10⁶ / (0.87 × ${input.fy} × ${zLong.toFixed(1)})`,
       result: `Asy = ${longSpanSteel.toFixed(0)} mm²/m`
     });
 
-    // Step 13: Minimum Steel Check
-    const minSteel = 0.0013 * 1000 * input.slabThickness;
     const shortOK = shortSpanSteel >= minSteel;
     const longOK = longSpanSteel >= minSteel;
     
@@ -596,8 +720,7 @@ Msy⁻ = ${negativeLongMoment.toFixed(2)} kNm/m`
     shortSpanSteel = Math.max(shortSpanSteel, minSteel);
     longSpanSteel = Math.max(longSpanSteel, minSteel);
 
-    // Step 14: Shear Check
-    const shearForce = 0.5 * ultimateLoad * input.shortSpan;
+    shearForce = 0.5 * ultimateLoad * input.shortSpan;
     shearStress = (shearForce * 1000) / (1000 * effectiveDepthShort);
     permissibleShear = calculateVc(shortSpanSteel, 1000, effectiveDepthShort, input.fcu);
     shearStatus = shearStress <= permissibleShear ? 'safe' : 'unsafe';
@@ -618,10 +741,11 @@ vc = ${permissibleShear.toFixed(3)} N/mm²`,
       bsReference: 'BS8110 Cl. 3.4.5'
     });
 
-    if (shearStatus === 'unsafe') designValid = false;
+    if (shearStatus === 'unsafe') {
+      designValid = false;
+      failureReasons.push(`Shear stress (${shearStress.toFixed(3)} N/mm²) exceeds vc (${permissibleShear.toFixed(3)} N/mm²)`);
+    }
 
-    // Step 15: Deflection Check
-    const basicRatio = getBasicSpanDepthRatio(input.supportCondition);
     const tensionMod = getTensionModificationFactor(shortSpanMoment * 1e6, 1000, effectiveDepthShort, input.fy);
     const allowableRatio = basicRatio * tensionMod;
     const actualRatio = (input.shortSpan * 1000) / effectiveDepthShort;
@@ -644,9 +768,11 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
       bsReference: 'BS8110 Cl. 3.4.6'
     });
 
-    if (deflectionStatus === 'unsafe') designValid = false;
+    if (deflectionStatus === 'unsafe') {
+      designValid = false;
+      failureReasons.push(`Deflection check failed: L/d = ${actualRatio.toFixed(1)} > ${allowableRatio.toFixed(1)}`);
+    }
 
-    // Step 16: Reinforcement Provision
     const shortBars = suggestBars(shortSpanSteel);
     const longBars = suggestBars(longSpanSteel);
     
@@ -656,50 +782,59 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
 Long Span (Top Layer): ${longBars}`,
       explanation: "Short span bars placed as bottom layer for greater effective depth"
     });
-  }
 
-  return {
-    steps,
-    summary: {
-      slabType: actualSlabType === 'one-way' ? 'One-Way Slab' : 'Two-Way Slab',
-      panelType: panelTypeLabels[input.panelType],
-      ultimateLoad,
-      shortSpanMoment,
-      longSpanMoment,
-      negativeShortMoment,
-      negativeLongMoment,
-      shortSpanSteel,
-      longSpanSteel,
-      effectiveDepthShort,
-      effectiveDepthLong: actualSlabType === 'two-way' ? effectiveDepthLong : undefined,
-      shearStress,
-      permissibleShear,
-      shearStatus,
-      deflectionStatus,
-      designValid,
-      spanRatio
-    }
-  };
-}
-
-function suggestBars(area: number): string {
-  const options = [
-    { dia: 8, spacing: 150, area: 335 },
-    { dia: 8, spacing: 200, area: 251 },
-    { dia: 10, spacing: 150, area: 524 },
-    { dia: 10, spacing: 200, area: 393 },
-    { dia: 10, spacing: 250, area: 314 },
-    { dia: 12, spacing: 150, area: 754 },
-    { dia: 12, spacing: 200, area: 566 },
-    { dia: 12, spacing: 250, area: 452 },
-    { dia: 16, spacing: 150, area: 1340 },
-    { dia: 16, spacing: 200, area: 1005 },
-  ];
-  
-  for (const opt of options) {
-    if (opt.area >= area) {
-      return `T${opt.dia}@${opt.spacing}mm c/c (${opt.area} mm²/m provided)`;
-    }
+    return {
+      steps,
+      summary: {
+        slabType: 'Two-Way Slab',
+        panelType: panelTypeLabels[input.panelType],
+        shortSpan: input.shortSpan,
+        longSpan: input.longSpan,
+        thickness: input.slabThickness,
+        fcu: input.fcu,
+        fy: input.fy,
+        deadLoad: input.deadLoad,
+        liveLoad: input.liveLoad,
+        cover: input.cover,
+        supportCondition: input.supportCondition,
+        shortEdgeContinuity: input.shortEdgeContinuity,
+        longEdgeContinuity: input.longEdgeContinuity,
+        spanRatio,
+        ultimateLoad,
+        effectiveDepthShort,
+        effectiveDepthLong,
+        shortSpanMoment,
+        longSpanMoment,
+        negativeShortMoment,
+        negativeLongMoment,
+        bsx_pos,
+        bsx_neg,
+        bsy_pos,
+        bsy_neg,
+        tableName,
+        kShort,
+        kLong,
+        kPrime: K_prime,
+        zShort,
+        zLong,
+        shortSpanSteel,
+        longSpanSteel,
+        minSteel,
+        shortSpanBarSuggestion: shortBars,
+        longSpanBarSuggestion: longBars,
+        shearForce,
+        shearStress,
+        permissibleShear,
+        basicSpanDepthRatio: basicRatio,
+        tensionModificationFactor: tensionMod,
+        allowableSpanDepthRatio: allowableRatio,
+        actualSpanDepthRatio: actualRatio,
+        shearStatus,
+        deflectionStatus,
+        kStatus,
+        designValid,
+        failureReasons
+      }
+    };
   }
-  return "T16@125mm c/c or use larger bars";
 }
