@@ -3,16 +3,19 @@ import { Header } from "@/components/Header";
 import { BeamInputForm } from "@/components/BeamInputForm";
 import { CalculationOutput } from "@/components/CalculationOutput";
 import { DesignAdvisory } from "@/components/DesignAdvisory";
+import { SaveCalculationButton } from "@/components/SaveCalculationButton";
 import { calculateBeamDesign, type BeamInput, type BeamResult } from "@/lib/beamCalculations";
 import { analyzeBeamDesign, type AdvisoryResult } from "@/lib/designAdvisory";
 
 const Index = () => {
   const [result, setResult] = useState<BeamResult | null>(null);
   const [advisory, setAdvisory] = useState<AdvisoryResult | null>(null);
+  const [lastInput, setLastInput] = useState<BeamInput | null>(null);
 
   const handleCalculate = (input: BeamInput) => {
     const calculationResult = calculateBeamDesign(input);
     setResult(calculationResult);
+    setLastInput(input);
     
     // Calculate effective depth for advisory
     const effectiveDepth = calculationResult.summary.effectiveDepth;
@@ -34,6 +37,11 @@ const Index = () => {
       fy: input.fy
     });
     setAdvisory(advisoryResult);
+  };
+
+  const getDefaultTitle = () => {
+    if (!lastInput) return "";
+    return `Beam ${lastInput.span}m × ${lastInput.width}×${lastInput.overallDepth}mm`;
   };
 
   return (
@@ -86,6 +94,18 @@ const Index = () => {
           </div>
           
           <div className="space-y-6">
+            {/* Save Button */}
+            {result && lastInput && (
+              <div className="flex justify-end">
+                <SaveCalculationButton
+                  calculationType="beam"
+                  inputData={lastInput as unknown as Record<string, unknown>}
+                  resultData={result as unknown as Record<string, unknown>}
+                  defaultTitle={getDefaultTitle()}
+                />
+              </div>
+            )}
+            
             {/* Design Advisory */}
             {advisory && (
               <div className="animate-fade-in">

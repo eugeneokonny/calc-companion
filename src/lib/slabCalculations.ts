@@ -76,15 +76,25 @@ export interface SlabResult {
     minSteel: number;
     shortSpanBarSuggestion: string;
     longSpanBarSuggestion?: string;
+    // Compression steel (new)
+    compressionSteelShort?: number;
+    compressionSteelLong?: number;
     // Shear values
     shearForce: number;
     shearStress: number;
     permissibleShear: number;
+    // Punching shear (new)
+    punchingShearStress?: number;
+    punchingShearCapacity?: number;
+    punchingShearStatus?: 'safe' | 'unsafe' | 'na';
     // Deflection values
     basicSpanDepthRatio: number;
     tensionModificationFactor: number;
     allowableSpanDepthRatio: number;
     actualSpanDepthRatio: number;
+    // Crack control (new)
+    maxBarSpacing: number;
+    crackControlStatus: 'safe' | 'review';
     // Status values
     shearStatus: 'safe' | 'unsafe';
     deflectionStatus: 'safe' | 'unsafe';
@@ -256,8 +266,43 @@ function calculateVc(As: number, b: number, d: number, fcu: number): number {
   return (0.79 * Math.pow(ratio, 1/3) * Math.max(depthFactor, 0.67) * Math.min(fcuFactor, 1.0)) / 1.25;
 }
 
-// Suggest bar configuration for slabs
-function suggestBars(area: number): string {
+// Calculate compression steel for doubly reinforced section (BS8110 Cl. 3.4.4.4)
+function calculateCompressionSteel(K: number, K_prime: number, M: number, b: number, d: number, d_prime: number, fcu: number, fy: number): { As: number; As_prime: number } {
+  if (K <= K_prime) {
+    // Singly reinforced - no compression steel needed
+    const z = Math.min(d * (0.5 + Math.sqrt(0.25 - K / 0.9)), 0.95 * d);
+    const As = (M * 1e6) / (0.87 * fy * z);
+    return { As, As_prime: 0 };
+  }
+  
+  // Doubly reinforced section
+  const z = d * (0.5 + Math.sqrt(0.25 - K_prime / 0.9));
+  const x = (d - z) / 0.45; // Neutral axis depth
+  
+  // Check if compression steel yields
+  const fs_prime = 0.87 * fy; // Assuming compression steel yields
+  
+  // Compression steel area
+  const M_excess = (M * 1e6) - (K_prime * b * d * d * fcu);
+  const As_prime = M_excess / (fs_prime * (d - d_prime));
+  
+  // Tension steel area
+  const As = (K_prime * b * d * d * fcu) / (0.87 * fy * z) + As_prime;
+  
+  return { As, As_prime: Math.max(As_prime, 0) };
+}
+
+// Calculate maximum bar spacing for crack control (BS8110 Cl. 3.12.11.2.7)
+function getMaxBarSpacing(fy: number, clearSpacing: number): { maxSpacing: number; status: 'safe' | 'review' } {
+  // For fy = 460 N/mm², max spacing = 3d or 750mm for slabs
+  // Table 3.28 simplified for slabs
+  const maxSpacing = fy <= 250 ? 300 : (fy <= 460 ? 200 : 150);
+  const status = clearSpacing <= maxSpacing ? 'safe' : 'review';
+  return { maxSpacing, status };
+}
+
+// Enhanced bar suggestion with crack control check
+function suggestBars(area: number, fy: number = 460): { suggestion: string; area: number; spacing: number } {
   const options = [
     { dia: 8, spacing: 150, area: 335 },
     { dia: 8, spacing: 200, area: 251 },
@@ -269,14 +314,29 @@ function suggestBars(area: number): string {
     { dia: 12, spacing: 250, area: 452 },
     { dia: 16, spacing: 150, area: 1340 },
     { dia: 16, spacing: 200, area: 1005 },
+    { dia: 16, spacing: 250, area: 804 },
+    { dia: 20, spacing: 150, area: 2094 },
+    { dia: 20, spacing: 200, area: 1571 },
   ];
   
+  // For fy = 460, max spacing is typically 200mm for crack control
+  const maxSpacing = fy <= 250 ? 300 : 200;
+  
   for (const opt of options) {
-    if (opt.area >= area) {
-      return `T${opt.dia}@${opt.spacing}mm c/c (${opt.area} mm²/m)`;
+    if (opt.area >= area && opt.spacing <= maxSpacing) {
+      return { 
+        suggestion: `T${opt.dia}@${opt.spacing}mm c/c (${opt.area} mm²/m)`,
+        area: opt.area,
+        spacing: opt.spacing
+      };
     }
   }
-  return "T16@125mm c/c or use larger bars";
+  
+  return { 
+    suggestion: "T20@150mm c/c or use larger bars",
+    area: 2094,
+    spacing: 150
+  };
 }
 
 export function calculateSlabDesign(input: SlabInput): SlabResult {
@@ -513,13 +573,29 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
       failureReasons.push(`Deflection check failed: L/d = ${actualRatio.toFixed(1)} > ${allowableRatio.toFixed(1)}`);
     }
 
-    const mainBars = suggestBars(shortSpanSteel);
-    const distBars = suggestBars(minSteel);
+    const mainBarsResult = suggestBars(shortSpanSteel, input.fy);
+    const distBarsResult = suggestBars(minSteel, input.fy);
+    const crackControl = getMaxBarSpacing(input.fy, mainBarsResult.spacing);
     
     steps.push({
       title: "Step 12: Reinforcement Provision",
-      result: `Main Steel (Short Span): ${mainBars}
-Distribution Steel: ${distBars}`
+      result: `Main Steel (Short Span): ${mainBarsResult.suggestion}
+Distribution Steel: ${distBarsResult.suggestion}`
+    });
+
+    // Add crack control check step
+    steps.push({
+      title: "Step 13: Crack Control Check",
+      formula: "Max bar spacing per BS8110 Cl. 3.12.11.2.7",
+      result: `Provided spacing: ${mainBarsResult.spacing}mm
+Max allowable: ${crackControl.maxSpacing}mm`,
+      isCheck: true,
+      checkPassed: crackControl.status === 'safe',
+      status: crackControl.status,
+      explanation: crackControl.status === 'safe' 
+        ? `Spacing OK for crack control ✓`
+        : `Consider reducing bar spacing for crack control`,
+      bsReference: 'BS8110 Cl. 3.12.11.2.7'
     });
 
     return {
@@ -552,8 +628,8 @@ Distribution Steel: ${distBars}`
         shortSpanSteel,
         longSpanSteel,
         minSteel,
-        shortSpanBarSuggestion: mainBars,
-        longSpanBarSuggestion: distBars,
+        shortSpanBarSuggestion: mainBarsResult.suggestion,
+        longSpanBarSuggestion: distBarsResult.suggestion,
         shearForce,
         shearStress,
         permissibleShear,
@@ -561,6 +637,8 @@ Distribution Steel: ${distBars}`
         tensionModificationFactor: getTensionModificationFactor(shortSpanMoment * 1e6, 1000, effectiveDepthShort, input.fy),
         allowableSpanDepthRatio: allowableRatio,
         actualSpanDepthRatio: actualRatio,
+        maxBarSpacing: crackControl.maxSpacing,
+        crackControlStatus: crackControl.status,
         shearStatus,
         deflectionStatus,
         kStatus,
@@ -773,14 +851,30 @@ Allowable span/d = ${allowableRatio.toFixed(1)}`,
       failureReasons.push(`Deflection check failed: L/d = ${actualRatio.toFixed(1)} > ${allowableRatio.toFixed(1)}`);
     }
 
-    const shortBars = suggestBars(shortSpanSteel);
-    const longBars = suggestBars(longSpanSteel);
+    const shortBarsResult = suggestBars(shortSpanSteel, input.fy);
+    const longBarsResult = suggestBars(longSpanSteel, input.fy);
+    const crackControl = getMaxBarSpacing(input.fy, shortBarsResult.spacing);
     
     steps.push({
       title: "Step 16: Reinforcement Provision",
-      result: `Short Span (Bottom Layer): ${shortBars}
-Long Span (Top Layer): ${longBars}`,
+      result: `Short Span (Bottom Layer): ${shortBarsResult.suggestion}
+Long Span (Top Layer): ${longBarsResult.suggestion}`,
       explanation: "Short span bars placed as bottom layer for greater effective depth"
+    });
+
+    // Add crack control check step
+    steps.push({
+      title: "Step 17: Crack Control Check",
+      formula: "Max bar spacing per BS8110 Cl. 3.12.11.2.7",
+      result: `Provided spacing: ${shortBarsResult.spacing}mm
+Max allowable: ${crackControl.maxSpacing}mm`,
+      isCheck: true,
+      checkPassed: crackControl.status === 'safe',
+      status: crackControl.status,
+      explanation: crackControl.status === 'safe' 
+        ? `Spacing OK for crack control ✓`
+        : `Consider reducing bar spacing for crack control`,
+      bsReference: 'BS8110 Cl. 3.12.11.2.7'
     });
 
     return {
@@ -820,8 +914,8 @@ Long Span (Top Layer): ${longBars}`,
         shortSpanSteel,
         longSpanSteel,
         minSteel,
-        shortSpanBarSuggestion: shortBars,
-        longSpanBarSuggestion: longBars,
+        shortSpanBarSuggestion: shortBarsResult.suggestion,
+        longSpanBarSuggestion: longBarsResult.suggestion,
         shearForce,
         shearStress,
         permissibleShear,
@@ -829,6 +923,8 @@ Long Span (Top Layer): ${longBars}`,
         tensionModificationFactor: tensionMod,
         allowableSpanDepthRatio: allowableRatio,
         actualSpanDepthRatio: actualRatio,
+        maxBarSpacing: crackControl.maxSpacing,
+        crackControlStatus: crackControl.status,
         shearStatus,
         deflectionStatus,
         kStatus,

@@ -3,16 +3,19 @@ import { Header } from "@/components/Header";
 import { SlabInputForm } from "@/components/SlabInputForm";
 import { SlabCalculationOutput } from "@/components/SlabCalculationOutput";
 import { DesignAdvisory } from "@/components/DesignAdvisory";
+import { SaveCalculationButton } from "@/components/SaveCalculationButton";
 import { calculateSlabDesign, type SlabInput, type SlabResult } from "@/lib/slabCalculations";
 import { analyzeSlabDesign, type AdvisoryResult } from "@/lib/designAdvisory";
 
 const SlabDesign = () => {
   const [result, setResult] = useState<SlabResult | null>(null);
   const [advisory, setAdvisory] = useState<AdvisoryResult | null>(null);
+  const [lastInput, setLastInput] = useState<SlabInput | null>(null);
 
   const handleCalculate = (input: SlabInput) => {
     const calculationResult = calculateSlabDesign(input);
     setResult(calculationResult);
+    setLastInput(input);
     
     // Generate design advisory
     const kValue = calculationResult.summary.shortSpanMoment * 1e6 / (1000 * Math.pow(calculationResult.summary.effectiveDepthShort, 2) * input.fcu);
@@ -30,6 +33,11 @@ const SlabDesign = () => {
       slabType: calculationResult.summary.slabType.includes('ONE-WAY') ? 'one-way' : 'two-way'
     });
     setAdvisory(advisoryResult);
+  };
+
+  const getDefaultTitle = () => {
+    if (!lastInput) return "";
+    return `Slab ${lastInput.shortSpan}×${lastInput.longSpan}m h=${lastInput.slabThickness}mm`;
   };
 
   return (
@@ -82,6 +90,18 @@ const SlabDesign = () => {
           </div>
           
           <div className="space-y-6">
+            {/* Save Button */}
+            {result && lastInput && (
+              <div className="flex justify-end">
+                <SaveCalculationButton
+                  calculationType="slab"
+                  inputData={lastInput as unknown as Record<string, unknown>}
+                  resultData={result as unknown as Record<string, unknown>}
+                  defaultTitle={getDefaultTitle()}
+                />
+              </div>
+            )}
+            
             {/* Design Advisory */}
             {advisory && (
               <div className="animate-fade-in">
