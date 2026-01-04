@@ -47,6 +47,45 @@ export type Database = {
         }
         Relationships: []
       }
+      calculations: {
+        Row: {
+          calculation_type: Database["public"]["Enums"]["calculation_type"]
+          created_at: string
+          id: string
+          input_data: Json
+          is_favorite: boolean
+          result_data: Json
+          session_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          calculation_type: Database["public"]["Enums"]["calculation_type"]
+          created_at?: string
+          id?: string
+          input_data: Json
+          is_favorite?: boolean
+          result_data: Json
+          session_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          calculation_type?: Database["public"]["Enums"]["calculation_type"]
+          created_at?: string
+          id?: string
+          input_data?: Json
+          is_favorite?: boolean
+          result_data?: Json
+          session_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       login_attempts: {
         Row: {
           attempted_at: string
@@ -254,11 +293,16 @@ export type Database = {
         Args: { _success: boolean; _user_id: string }
         Returns: boolean
       }
+      cleanup_temporary_calculations: {
+        Args: { _user_id: string }
+        Returns: number
+      }
       deactivate_account: { Args: { _user_id: string }; Returns: boolean }
       get_account_status: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["account_status"]
       }
+      get_favorite_count: { Args: { _user_id: string }; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -298,6 +342,7 @@ export type Database = {
         | "suspended"
         | "pending_deletion"
       app_role: "admin" | "user"
+      calculation_type: "beam" | "slab" | "continuous_beam"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -432,6 +477,7 @@ export const Constants = {
         "pending_deletion",
       ],
       app_role: ["admin", "user"],
+      calculation_type: ["beam", "slab", "continuous_beam"],
     },
   },
 } as const

@@ -1,5 +1,5 @@
-import { Ruler, Grid3X3, GitBranch, LogOut, User } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Ruler, Grid3X3, GitBranch, LogOut, User, FolderOpen, Settings, Shield } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,12 +13,14 @@ import {
 
 export function Header() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAdmin, signOut } = useAuth();
   
   const navItems = [
     { path: "/", label: "RC Beam", icon: Ruler },
     { path: "/slab", label: "RC Slab", icon: Grid3X3 },
     { path: "/continuous-beam", label: "Continuous Beam", icon: GitBranch },
+    { path: "/my-calculations", label: "My Calcs", icon: FolderOpen },
   ];
   
   return (
@@ -75,6 +77,24 @@ export function Header() {
                       )}
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate('/my-calculations')}>
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    My Calculations
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/account')}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Account Settings
+                  </DropdownMenuItem>
+                  {isAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate('/admin')}>
+                        <Shield className="mr-2 h-4 w-4" />
+                        Admin Dashboard
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />

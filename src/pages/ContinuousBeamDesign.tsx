@@ -2,14 +2,22 @@ import { useState } from "react";
 import { Header } from "@/components/Header";
 import { ContinuousBeamInputForm } from "@/components/ContinuousBeamInputForm";
 import { ContinuousBeamOutput } from "@/components/ContinuousBeamOutput";
+import { SaveCalculationButton } from "@/components/SaveCalculationButton";
 import { calculateContinuousBeamDesign, type ContinuousBeamInput, type ContinuousBeamResult } from "@/lib/continuousBeamCalculations";
 
 const ContinuousBeamDesign = () => {
   const [result, setResult] = useState<ContinuousBeamResult | null>(null);
+  const [lastInput, setLastInput] = useState<ContinuousBeamInput | null>(null);
 
   const handleCalculate = (input: ContinuousBeamInput) => {
     const calculationResult = calculateContinuousBeamDesign(input);
     setResult(calculationResult);
+    setLastInput(input);
+  };
+
+  const getDefaultTitle = () => {
+    if (!lastInput) return "";
+    return `Continuous Beam ${lastInput.spans.length}-span ${lastInput.spans[0]?.length || 0}m`;
   };
 
   return (
@@ -57,7 +65,19 @@ const ContinuousBeamDesign = () => {
             </div>
           </div>
           
-          <div>
+          <div className="space-y-6">
+            {/* Save Button */}
+            {result && lastInput && (
+              <div className="flex justify-end">
+                <SaveCalculationButton
+                  calculationType="continuous_beam"
+                  inputData={lastInput as unknown as Record<string, unknown>}
+                  resultData={result as unknown as Record<string, unknown>}
+                  defaultTitle={getDefaultTitle()}
+                />
+              </div>
+            )}
+            
             <ContinuousBeamOutput result={result} />
           </div>
         </div>
