@@ -37,7 +37,8 @@ const SlabDesign = () => {
 
   const getDefaultTitle = () => {
     if (!lastInput) return "";
-    return `Slab ${lastInput.shortSpan}×${lastInput.longSpan}m h=${lastInput.slabThickness}mm`;
+    const slabId = lastInput.slabId || 'S1';
+    return `${slabId} - ${lastInput.shortSpan}×${lastInput.longSpan}m h=${lastInput.slabThickness}mm`;
   };
 
   return (

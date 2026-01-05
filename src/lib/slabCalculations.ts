@@ -1,16 +1,36 @@
 export type SlabType = 'one-way' | 'two-way';
 export type PanelType = 'interior' | 'edge' | 'corner' | 'cantilever';
 export type EdgeContinuity = 'continuous' | 'discontinuous';
+export type SupportType = 'wall' | 'beam' | 'free' | 'cantilever';
+
+// New edge-based restraint system
+export interface EdgeRestraint {
+  e1_short: EdgeContinuity; // First short span edge
+  e2_short: EdgeContinuity; // Second short span edge
+  e3_long: EdgeContinuity;  // First long span edge
+  e4_long: EdgeContinuity;  // Second long span edge
+}
 
 export interface SlabInput {
+  slabId?: string;
   slabType: SlabType;
   panelType: PanelType;
+  // Legacy edge continuity (kept for compatibility)
   shortEdgeContinuity: EdgeContinuity;
   longEdgeContinuity: EdgeContinuity;
+  // New 4-edge restraint system
+  edgeRestraint: EdgeRestraint;
+  supportTypes: {
+    e1: SupportType;
+    e2: SupportType;
+    e3: SupportType;
+    e4: SupportType;
+  };
   shortSpan: number; // m (lx)
   longSpan: number; // m (ly)
   deadLoad: number; // kN/m²
   liveLoad: number; // kN/m²
+  finishes: number; // kN/m² (additional finishes load)
   fcu: number; // N/mm²
   fy: number; // N/mm²
   slabThickness: number; // mm
@@ -362,13 +382,22 @@ export function calculateSlabDesign(input: SlabInput): SlabResult {
     'cantilever': 'Cantilever Panel'
   };
 
+  // Get edge restraint summary
+  const edgeRestraintSummary = input.edgeRestraint ? 
+    `E1 (Short): ${input.edgeRestraint.e1_short}, E2 (Short): ${input.edgeRestraint.e2_short}
+E3 (Long): ${input.edgeRestraint.e3_long}, E4 (Long): ${input.edgeRestraint.e4_long}` :
+    `Short Edge: ${input.shortEdgeContinuity}
+Long Edge: ${input.longEdgeContinuity}`;
+
   // STEP 0: Slab Declaration
   steps.push({
     title: "SLAB DECLARATION",
-    result: `Type: ${actualSlabType === 'one-way' ? 'ONE-WAY SLAB' : 'TWO-WAY SLAB'}
+    result: `Slab ID: ${input.slabId || 'S1'}
+Type: ${actualSlabType === 'one-way' ? 'ONE-WAY SLAB' : 'TWO-WAY SLAB'}
 Panel: ${panelTypeLabels[input.panelType]}
-Short Edge: ${input.shortEdgeContinuity}
-Long Edge: ${input.longEdgeContinuity}`,
+Dimensions: ${input.shortSpan}m × ${input.longSpan}m (Lx × Ly)
+Aspect Ratio: ${spanRatio.toFixed(2)}
+${edgeRestraintSummary}`,
     explanation: "This slab design is in accordance with BS 8110-1:1997",
     bsReference: actualSlabType === 'one-way' ? 'Table 3.10' : 'Tables 3.14 & 3.15',
     status: 'safe'
@@ -386,13 +415,16 @@ Long Edge: ${input.longEdgeContinuity}`,
     status: 'safe'
   });
 
-  // Step 2: Ultimate Design Load
-  const ultimateLoad = gamma_dead * input.deadLoad + gamma_live * input.liveLoad;
+  // Step 2: Ultimate Design Load (including finishes)
+  const finishesLoad = input.finishes || 0;
+  const totalDeadLoad = input.deadLoad + finishesLoad;
+  const ultimateLoad = gamma_dead * totalDeadLoad + gamma_live * input.liveLoad;
   
   steps.push({
     title: "Step 2: Ultimate Design Load",
-    formula: "n = γf,dead × Gk + γf,live × Qk",
-    substitution: `n = 1.4 × ${input.deadLoad} + 1.6 × ${input.liveLoad}`,
+    formula: "n = γf,dead × (Gk + Finishes) + γf,live × Qk",
+    substitution: `n = 1.4 × (${input.deadLoad} + ${finishesLoad}) + 1.6 × ${input.liveLoad}
+n = 1.4 × ${totalDeadLoad} + 1.6 × ${input.liveLoad}`,
     result: `n = ${ultimateLoad.toFixed(2)} kN/m²`,
     bsReference: 'BS8110 Cl. 2.4.3'
   });
