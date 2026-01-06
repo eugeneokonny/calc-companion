@@ -1,4 +1,4 @@
-import { Ruler, Grid3X3, GitBranch, LogOut, User, FolderOpen, Settings, Shield } from "lucide-react";
+import { Ruler, Grid3X3, GitBranch, Footprints, LogOut, User, FolderOpen, Settings, Shield } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export function Header() {
     { path: "/", label: "RC Beam", icon: Ruler },
     { path: "/slab", label: "RC Slab", icon: Grid3X3 },
     { path: "/continuous-beam", label: "Continuous Beam", icon: GitBranch },
+    { path: "/staircase", label: "Staircase", icon: Footprints },
     { path: "/my-calculations", label: "My Calcs", icon: FolderOpen },
   ];
   

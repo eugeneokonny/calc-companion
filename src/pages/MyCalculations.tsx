@@ -24,6 +24,7 @@ import {
   Ruler, 
   Grid3X3, 
   GitBranch,
+  Footprints,
   Loader2,
   FileText
 } from "lucide-react";
@@ -32,13 +33,15 @@ import { format } from "date-fns";
 const calculationTypeIcons = {
   beam: Ruler,
   slab: Grid3X3,
-  continuous_beam: GitBranch
+  continuous_beam: GitBranch,
+  staircase: Footprints
 };
 
 const calculationTypeLabels = {
   beam: "RC Beam",
   slab: "RC Slab",
-  continuous_beam: "Continuous Beam"
+  continuous_beam: "Continuous Beam",
+  staircase: "Staircase"
 };
 
 function CalculationCard({ 
