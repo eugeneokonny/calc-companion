@@ -9,6 +9,7 @@ import { PolicyAcceptanceModal } from "@/components/PolicyAcceptanceModal";
 import Index from "./pages/Index";
 import SlabDesign from "./pages/SlabDesign";
 import ContinuousBeamDesign from "./pages/ContinuousBeamDesign";
+import StaircaseDesign from "./pages/StaircaseDesign";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/AdminDashboard";
 import AccountSettings from "./pages/AccountSettings";
@@ -40,6 +41,11 @@ const App = () => (
             <Route path="/continuous-beam" element={
               <ProtectedRoute>
                 <ContinuousBeamDesign />
+              </ProtectedRoute>
+            } />
+            <Route path="/staircase" element={
+              <ProtectedRoute>
+                <StaircaseDesign />
               </ProtectedRoute>
             } />
             <Route path="/admin" element={
