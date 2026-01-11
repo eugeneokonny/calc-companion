@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PolicyAcceptanceModal } from "@/components/PolicyAcceptanceModal";
 import Index from "./pages/Index";
 import SlabDesign from "./pages/SlabDesign";
+import ColumnDesign from "./pages/ColumnDesign";
 import ContinuousBeamDesign from "./pages/ContinuousBeamDesign";
 import StaircaseDesign from "./pages/StaircaseDesign";
 import Auth from "./pages/Auth";
@@ -36,6 +37,11 @@ const App = () => (
             <Route path="/slab" element={
               <ProtectedRoute>
                 <SlabDesign />
+              </ProtectedRoute>
+            } />
+            <Route path="/column" element={
+              <ProtectedRoute>
+                <ColumnDesign />
               </ProtectedRoute>
             } />
             <Route path="/continuous-beam" element={
