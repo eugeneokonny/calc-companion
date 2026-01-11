@@ -365,6 +365,7 @@ export function calculateSlabDesign(input: SlabInput): SlabResult {
   const gamma_dead = 1.4;
   const gamma_live = 1.6;
   const K_prime = 0.156;
+  const concreteWeight = 25; // kN/m³
 
   // Assume 10mm bars for effective depth calculation
   const barDiameter = 10;
@@ -396,46 +397,82 @@ Long Edge: ${input.longEdgeContinuity}`;
 Type: ${actualSlabType === 'one-way' ? 'ONE-WAY SLAB' : 'TWO-WAY SLAB'}
 Panel: ${panelTypeLabels[input.panelType]}
 Dimensions: ${input.shortSpan}m × ${input.longSpan}m (Lx × Ly)
-Aspect Ratio: ${spanRatio.toFixed(2)}
+Thickness: ${input.slabThickness}mm
+Aspect Ratio: Ly/Lx = ${spanRatio.toFixed(3)}
+Concrete: C${input.fcu} (fcu = ${input.fcu} N/mm²)
+Steel: Grade ${input.fy} (fy = ${input.fy} N/mm²)
+Cover: ${input.cover}mm
 ${edgeRestraintSummary}`,
-    explanation: "This slab design is in accordance with BS 8110-1:1997",
+    explanation: "Design in accordance with BS 8110-1:1997",
     bsReference: actualSlabType === 'one-way' ? 'Table 3.10' : 'Tables 3.14 & 3.15',
     status: 'safe'
   });
 
-  // Step 1: Span Ratio Verification
+  // Step 1: Self-Weight Calculation
+  const selfWeight = (input.slabThickness / 1000) * concreteWeight;
+  
   steps.push({
-    title: "Step 1: Span Ratio Verification",
+    title: "Step 1: Self-Weight Calculation",
+    formula: "Self-weight = h × γc",
+    substitution: `Self-weight = (${input.slabThickness}/1000) × ${concreteWeight}
+Self-weight = ${(input.slabThickness/1000).toFixed(3)} × ${concreteWeight}`,
+    result: `Self-weight = ${selfWeight.toFixed(2)} kN/m²`,
+    explanation: "Concrete density γc = 25 kN/m³",
+    bsReference: 'BS8110 Cl. 2.4.2'
+  });
+
+  // Step 2: Span Ratio Verification
+  steps.push({
+    title: "Step 2: Span Ratio Verification",
     formula: "ly/lx ratio determines slab type",
-    substitution: `ly/lx = ${input.longSpan.toFixed(2)} / ${input.shortSpan.toFixed(2)} = ${spanRatio.toFixed(3)}`,
+    substitution: `ly/lx = ${input.longSpan.toFixed(3)} / ${input.shortSpan.toFixed(3)}
+ly/lx = ${spanRatio.toFixed(3)}`,
     result: spanRatio > 2 
       ? `ly/lx = ${spanRatio.toFixed(2)} > 2 → Design as ONE-WAY slab`
       : `ly/lx = ${spanRatio.toFixed(2)} ≤ 2 → Design as TWO-WAY slab`,
+    explanation: spanRatio > 2 
+      ? "Load is primarily carried in the short span direction only"
+      : "Load is carried in both directions with bending in two orthogonal axes",
     bsReference: 'BS8110 Cl. 3.5.3.3',
     status: 'safe'
   });
 
-  // Step 2: Ultimate Design Load (including finishes)
+  // Step 3: Ultimate Design Load (including finishes)
   const finishesLoad = input.finishes || 0;
-  const totalDeadLoad = input.deadLoad + finishesLoad;
+  const totalDeadLoad = selfWeight + input.deadLoad + finishesLoad;
   const ultimateLoad = gamma_dead * totalDeadLoad + gamma_live * input.liveLoad;
   
   steps.push({
-    title: "Step 2: Ultimate Design Load",
-    formula: "n = γf,dead × (Gk + Finishes) + γf,live × Qk",
-    substitution: `n = 1.4 × (${input.deadLoad} + ${finishesLoad}) + 1.6 × ${input.liveLoad}
-n = 1.4 × ${totalDeadLoad} + 1.6 × ${input.liveLoad}`,
+    title: "Step 3: Ultimate Design Load",
+    formula: "n = γf,dead × Gk(total) + γf,live × Qk",
+    substitution: `Gk(total) = Self-weight + Imposed Dead + Finishes
+Gk(total) = ${selfWeight.toFixed(2)} + ${input.deadLoad} + ${finishesLoad}
+Gk(total) = ${totalDeadLoad.toFixed(2)} kN/m²
+
+n = 1.4 × ${totalDeadLoad.toFixed(2)} + 1.6 × ${input.liveLoad}
+n = ${(gamma_dead * totalDeadLoad).toFixed(2)} + ${(gamma_live * input.liveLoad).toFixed(2)}`,
     result: `n = ${ultimateLoad.toFixed(2)} kN/m²`,
+    explanation: "Partial safety factors: γf = 1.4 for dead loads, γf = 1.6 for live loads",
     bsReference: 'BS8110 Cl. 2.4.3'
   });
 
-  // Step 3: Effective Depth
+  // Step 4: Effective Depth
   steps.push({
-    title: "Step 3: Effective Depth Calculation",
+    title: "Step 4: Effective Depth Calculation",
     formula: "d = h - cover - φ/2",
-    substitution: `d = ${input.slabThickness} - ${input.cover} - ${barDiameter}/2`,
+    substitution: `Assuming T${barDiameter} main bars:
+
+Short span (bottom layer):
+d = ${input.slabThickness} - ${input.cover} - ${barDiameter}/2
+d = ${input.slabThickness} - ${input.cover} - ${barDiameter/2}
+d = ${effectiveDepthShort.toFixed(0)} mm
+
+Long span (top layer, allowing for crossing bars):
+d = ${effectiveDepthShort.toFixed(0)} - ${barDiameter}
+d = ${effectiveDepthLong.toFixed(0)} mm`,
     result: `d (short span) = ${effectiveDepthShort.toFixed(0)} mm
-d (long span) = ${effectiveDepthLong.toFixed(0)} mm (second layer)`,
+d (long span) = ${effectiveDepthLong.toFixed(0)} mm`,
+    explanation: "Short span bars placed as bottom layer for greater effective depth",
     bsReference: 'BS8110 Cl. 3.4.4.1'
   });
 
