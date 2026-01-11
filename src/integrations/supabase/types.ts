@@ -342,7 +342,12 @@ export type Database = {
         | "suspended"
         | "pending_deletion"
       app_role: "admin" | "user"
-      calculation_type: "beam" | "slab" | "continuous_beam" | "staircase"
+      calculation_type:
+        | "beam"
+        | "slab"
+        | "continuous_beam"
+        | "staircase"
+        | "column"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -477,7 +482,13 @@ export const Constants = {
         "pending_deletion",
       ],
       app_role: ["admin", "user"],
-      calculation_type: ["beam", "slab", "continuous_beam", "staircase"],
+      calculation_type: [
+        "beam",
+        "slab",
+        "continuous_beam",
+        "staircase",
+        "column",
+      ],
     },
   },
 } as const
