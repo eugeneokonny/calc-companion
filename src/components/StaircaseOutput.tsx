@@ -4,6 +4,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle2, XCircle, AlertTriangle, Footprints, Lightbulb } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { StaircaseDiagram } from "./diagrams/StaircaseDiagram";
 import type { StaircaseResult } from "@/lib/staircaseCalculations";
 
 interface StaircaseOutputProps {

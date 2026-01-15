@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle2, XCircle, FileText, Grid3X3 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { DesignAdvisory } from "./DesignAdvisory";
+import { SlabDiagram } from "./diagrams/SlabDiagram";
 import {
   Table,
   TableBody,
