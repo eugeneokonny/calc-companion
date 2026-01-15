@@ -209,6 +209,17 @@ export function CalculationOutput({ result }: CalculationOutputProps) {
           />
         )}
 
+        {/* Beam Diagram */}
+        <BeamDiagram 
+          width={s.width}
+          depth={s.overallDepth}
+          cover={s.cover}
+          topBars={s.compressionBarSuggestion || "2T12"}
+          bottomBars={s.barSuggestion}
+          links={`T${s.linkSize}@${s.linkSpacing}`}
+          isDoublyReinforced={s.isDoublyReinforced}
+        />
+
         {/* ==================== SECTION A — LOADING ==================== */}
         <SectionHeader 
           section="A" 

@@ -152,6 +152,18 @@ Design per BS 8110-1:1997`;
           </div>
         </div>
 
+        {/* Staircase Diagram */}
+        <StaircaseDiagram 
+          spanLength={summary.effectiveSpan}
+          waistThickness={summary.waistThickness}
+          riserHeight={summary.riserHeight}
+          goingLength={summary.goingLength}
+          numberOfSteps={summary.numberOfRisers}
+          cover={summary.cover || 25}
+          mainBars={summary.barSuggestion}
+          distributionBars={summary.distBarSuggestion}
+        />
+
         {/* Reinforcement Summary */}
         <div className="p-4 border rounded-lg bg-primary/5">
           <h4 className="font-semibold mb-2">Reinforcement</h4>

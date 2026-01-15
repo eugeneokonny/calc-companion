@@ -208,6 +208,19 @@ export function SlabCalculationOutput({ result }: SlabCalculationOutputProps) {
           />
         )}
 
+        {/* Slab Diagram */}
+        <SlabDiagram 
+          thickness={s.thickness}
+          shortSpan={s.shortSpan}
+          longSpan={s.longSpan}
+          cover={s.cover}
+          bottomShortBars={s.shortSpanBarSuggestion}
+          bottomLongBars={s.longSpanBarSuggestion}
+          topShortBars={s.negativeShortMoment && s.negativeShortMoment > 0 ? s.shortSpanBarSuggestion : undefined}
+          topLongBars={s.negativeLongMoment && s.negativeLongMoment > 0 ? s.longSpanBarSuggestion : undefined}
+          slabType={s.slabType as 'One-Way Slab' | 'Two-Way Slab'}
+        />
+
         {/* ==================== SECTION A — SLAB DECLARATION ==================== */}
         <SectionHeader 
           section="A" 

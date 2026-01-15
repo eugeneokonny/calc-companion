@@ -108,6 +108,13 @@ const ColumnOutput: React.FC<ColumnOutputProps> = ({ result }) => {
   };
 
   // Group steps by section
+  // Extract geometry from first steps if available
+  const widthMatch = result.steps.find(s => s.substitution?.includes('column width'))?.substitution?.match(/(\d+)/);
+  const depthMatch = result.steps.find(s => s.substitution?.includes('column depth'))?.substitution?.match(/(\d+)/);
+  const columnWidth = widthMatch ? parseInt(widthMatch[1]) : 300;
+  const columnDepth = depthMatch ? parseInt(depthMatch[1]) : 300;
+  const columnCover = 40; // Default cover for columns
+  
   const loadingSteps = result.steps.filter(s => s.stepNumber <= 2);
   const classificationSteps = result.steps.filter(s => s.stepNumber >= 3 && s.stepNumber <= 5);
   const eccentricitySteps = result.steps.filter(s => s.stepNumber >= 6 && s.stepNumber <= 7);
@@ -181,6 +188,15 @@ const ColumnOutput: React.FC<ColumnOutputProps> = ({ result }) => {
         )}
 
         <Separator />
+
+        {/* Column Diagram */}
+        <ColumnDiagram 
+          width={columnWidth}
+          depth={columnDepth}
+          cover={columnCover}
+          mainBars={result.summary.providedBars}
+          links={`T8@${result.summary.linkSpacing}`}
+        />
 
         {/* Section A: Loading */}
         <SectionHeader section="A" title="Loading Calculations" />
