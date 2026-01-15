@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { CheckCircle, XCircle, AlertTriangle, Copy, FileText, Columns } from 'lucide-react';
 import { ColumnResult, CalculationStep } from '@/lib/columnCalculations';
 import { useToast } from '@/hooks/use-toast';
+import { ColumnDiagram } from './diagrams/ColumnDiagram';
 
 interface ColumnOutputProps {
   result: ColumnResult | null;

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle2, XCircle, FileText } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { DesignAdvisory } from "./DesignAdvisory";
+import { BeamDiagram } from "./diagrams/BeamDiagram";
 import {
   Table,
   TableBody,
