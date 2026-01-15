@@ -215,6 +215,23 @@ export function ContinuousBeamOutput({ result }: ContinuousBeamOutputProps) {
           />
         )}
 
+        {/* Continuous Beam Diagram */}
+        <ContinuousBeamDiagram 
+          spans={result.spanResults.map(span => ({
+            spanIndex: span.spanIndex,
+            length: span.length,
+            topSteel: span.topSteel,
+            bottomSteel: span.bottomSteel,
+            links: `T${span.linkSize}@${span.linkSpacing}`,
+            positiveMoment: span.positiveMoment,
+            negativeMomentLeft: span.negativeMomentLeft,
+            negativeMomentRight: span.negativeMomentRight,
+          }))}
+          width={result.summary.width || width}
+          depth={effectiveDepth + 50}
+          cover={25}
+        />
+
         {/* ==================== SECTION A — LOADING ==================== */}
         <SectionHeader 
           section="A" 
