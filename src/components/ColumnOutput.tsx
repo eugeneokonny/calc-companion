@@ -6,7 +6,8 @@ import { Separator } from '@/components/ui/separator';
 import { CheckCircle, XCircle, AlertTriangle, Copy, FileText, Columns } from 'lucide-react';
 import { ColumnResult, CalculationStep } from '@/lib/columnCalculations';
 import { useToast } from '@/hooks/use-toast';
-import { ColumnDiagram } from './diagrams/ColumnDiagram';
+import { ColumnDiagram, Column3D } from './diagrams';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface ColumnOutputProps {
   result: ColumnResult | null;
@@ -189,14 +190,31 @@ const ColumnOutput: React.FC<ColumnOutputProps> = ({ result }) => {
 
         <Separator />
 
-        {/* Column Diagram */}
-        <ColumnDiagram 
-          width={columnWidth}
-          depth={columnDepth}
-          cover={columnCover}
-          mainBars={result.summary.providedBars}
-          links={`T8@${result.summary.linkSpacing}`}
-        />
+        {/* Column Diagrams - 2D and 3D */}
+        <Tabs defaultValue="3d" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="2d">2D Cross-Section</TabsTrigger>
+            <TabsTrigger value="3d">3D Visualization</TabsTrigger>
+          </TabsList>
+          <TabsContent value="2d">
+            <ColumnDiagram 
+              width={columnWidth}
+              depth={columnDepth}
+              cover={columnCover}
+              mainBars={result.summary.providedBars}
+              links={`T8@${result.summary.linkSpacing}`}
+            />
+          </TabsContent>
+          <TabsContent value="3d">
+            <Column3D 
+              width={columnWidth}
+              depth={columnDepth}
+              cover={columnCover}
+              mainBars={result.summary.providedBars}
+              links={`T8@${result.summary.linkSpacing}`}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* Section A: Loading */}
         <SectionHeader section="A" title="Loading Calculations" />

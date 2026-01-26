@@ -437,23 +437,48 @@ ly/lx = ${spanRatio.toFixed(3)}`,
     status: 'safe'
   });
 
-  // Step 3: Ultimate Design Load (including finishes)
+  // Step 3: Ultimate Design Load (including finishes) - Enhanced UDL breakdown
   const finishesLoad = input.finishes || 0;
   const totalDeadLoad = selfWeight + input.deadLoad + finishesLoad;
-  const ultimateLoad = gamma_dead * totalDeadLoad + gamma_live * input.liveLoad;
+  const factoredDeadLoad = gamma_dead * totalDeadLoad;
+  const factoredLiveLoad = gamma_live * input.liveLoad;
+  const ultimateLoad = factoredDeadLoad + factoredLiveLoad;
+  
+  // Calculate load proportions for accuracy verification
+  const deadLoadProportion = (factoredDeadLoad / ultimateLoad) * 100;
+  const liveLoadProportion = (factoredLiveLoad / ultimateLoad) * 100;
   
   steps.push({
-    title: "Step 3: Ultimate Design Load",
-    formula: "n = γf,dead × Gk(total) + γf,live × Qk",
-    substitution: `Gk(total) = Self-weight + Imposed Dead + Finishes
-Gk(total) = ${selfWeight.toFixed(2)} + ${input.deadLoad} + ${finishesLoad}
-Gk(total) = ${totalDeadLoad.toFixed(2)} kN/m²
+    title: "Step 3: Ultimate Design Load (UDL)",
+    formula: "n = γG × Gk(total) + γQ × Qk",
+    substitution: `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHARACTERISTIC LOADS (Unfactored) per m²
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Slab Self-Weight (h×γc)   = ${selfWeight.toFixed(3)} kN/m²
+  Imposed Dead Load (Gk)    = ${input.deadLoad.toFixed(3)} kN/m²
+  Finishes                  = ${finishesLoad.toFixed(3)} kN/m²
+  ────────────────────────────────────────────
+  Total Dead Load           = ${totalDeadLoad.toFixed(3)} kN/m²
+  Live Load (Qk)            = ${input.liveLoad.toFixed(3)} kN/m²
 
-n = 1.4 × ${totalDeadLoad.toFixed(2)} + 1.6 × ${input.liveLoad}
-n = ${(gamma_dead * totalDeadLoad).toFixed(2)} + ${(gamma_live * input.liveLoad).toFixed(2)}`,
-    result: `n = ${ultimateLoad.toFixed(2)} kN/m²`,
-    explanation: "Partial safety factors: γf = 1.4 for dead loads, γf = 1.6 for live loads",
-    bsReference: 'BS8110 Cl. 2.4.3'
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTIAL SAFETY FACTORS (BS 8110 Cl. 2.4.3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  γG (dead loads)           = 1.4
+  γQ (live loads)           = 1.6
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ULTIMATE LOADS (Factored) per m²
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Factored Dead = 1.4 × ${totalDeadLoad.toFixed(3)} = ${factoredDeadLoad.toFixed(3)} kN/m²
+  Factored Live = 1.6 × ${input.liveLoad.toFixed(3)} = ${factoredLiveLoad.toFixed(3)} kN/m²
+  ────────────────────────────────────────────
+  Ultimate UDL  = ${factoredDeadLoad.toFixed(3)} + ${factoredLiveLoad.toFixed(3)}`,
+    result: `n = ${ultimateLoad.toFixed(3)} kN/m²
+
+Load Proportions: Dead ${deadLoadProportion.toFixed(1)}% | Live ${liveLoadProportion.toFixed(1)}%`,
+    explanation: "Ultimate limit state load combination. BS 8110-1 specifies γG = 1.4 for permanent actions and γQ = 1.6 for variable actions. The total ultimate load is used to calculate bending moments using BS 8110 coefficient method.",
+    bsReference: 'BS8110 Cl. 2.4.3 Table 2.1'
   });
 
   // Step 4: Effective Depth

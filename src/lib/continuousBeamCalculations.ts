@@ -318,8 +318,9 @@ Concrete: C${input.fcu}, Steel: Grade ${input.fy}`,
     status: 'safe'
   });
 
-  // Step 2: Calculate ultimate loads for each span
+  // Step 2: Calculate ultimate loads for each span - Enhanced with detailed UDL breakdown
   const ultimateLoads: number[] = [];
+  const spanLoadDetails: { totalDead: number; factoredDead: number; factoredLive: number; ultimate: number }[] = [];
   let selfWeight = 0;
   
   if (input.includeSelfWeight) {
@@ -327,18 +328,48 @@ Concrete: C${input.fcu}, Steel: Grade ${input.fy}`,
     selfWeight = (input.width / 1000) * (input.beamDepth / 1000) * 25;
   }
 
+  // Calculate detailed load breakdown for each span
+  input.spans.forEach((span) => {
+    const totalDead = span.deadLoad + (input.includeSelfWeight ? selfWeight : 0);
+    const factoredDead = gamma_dead * totalDead;
+    const factoredLive = gamma_live * span.liveLoad;
+    const ultimateLoad = factoredDead + factoredLive;
+    ultimateLoads.push(ultimateLoad);
+    spanLoadDetails.push({ totalDead, factoredDead, factoredLive, ultimate: ultimateLoad });
+  });
+
+  // Create detailed load breakdown table
+  const loadBreakdownTable = input.spans.map((span, i) => {
+    const detail = spanLoadDetails[i];
+    const deadProp = (detail.factoredDead / detail.ultimate) * 100;
+    const liveProp = (detail.factoredLive / detail.ultimate) * 100;
+    return `━━━ SPAN ${i + 1} (L = ${span.length}m) ━━━
+  Gk (imposed)    = ${span.deadLoad.toFixed(3)} kN/m
+  Self-weight     = ${selfWeight.toFixed(3)} kN/m
+  Total Dead      = ${detail.totalDead.toFixed(3)} kN/m
+  Qk (live)       = ${span.liveLoad.toFixed(3)} kN/m
+  ────────────────────────────────────
+  Factored Dead   = 1.4 × ${detail.totalDead.toFixed(3)} = ${detail.factoredDead.toFixed(3)} kN/m
+  Factored Live   = 1.6 × ${span.liveLoad.toFixed(3)} = ${detail.factoredLive.toFixed(3)} kN/m
+  Ultimate w      = ${detail.ultimate.toFixed(3)} kN/m
+  (Dead ${deadProp.toFixed(1)}% | Live ${liveProp.toFixed(1)}%)`;
+  }).join('\n\n');
+
   steps.push({
-    title: "Step 1: Ultimate Design Loads",
-    formula: "w = 1.4(Gk + SW) + 1.6Qk",
-    substitution: input.spans.map((span, i) => {
-      const totalDead = span.deadLoad + (input.includeSelfWeight ? selfWeight : 0);
-      const ultimateLoad = gamma_dead * totalDead + gamma_live * span.liveLoad;
-      ultimateLoads.push(ultimateLoad);
-      return `Span ${i + 1}: w = 1.4 × (${span.deadLoad} + ${selfWeight.toFixed(2)}) + 1.6 × ${span.liveLoad} = ${ultimateLoad.toFixed(2)} kN/m`;
-    }).join('\n'),
-    result: `Self-weight: ${selfWeight.toFixed(2)} kN/m
-Ultimate loads calculated for all spans`,
-    bsReference: "BS8110 Cl. 2.4.3"
+    title: "Step 1: Ultimate Design Loads (UDL per Span)",
+    formula: "w = γG × (Gk + SW) + γQ × Qk",
+    substitution: `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTIAL SAFETY FACTORS (BS 8110 Cl. 2.4.3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  γG (dead loads)           = 1.4
+  γQ (live loads)           = 1.6
+  Beam Self-Weight          = ${selfWeight.toFixed(3)} kN/m
+
+${loadBreakdownTable}`,
+    result: `Ultimate Loads Summary:
+${ultimateLoads.map((w, i) => `  Span ${i + 1}: w = ${w.toFixed(3)} kN/m`).join('\n')}`,
+    explanation: "Each span may have different loading conditions. The ultimate load for each span is calculated independently using BS 8110 partial safety factors.",
+    bsReference: "BS8110 Cl. 2.4.3 Table 2.1"
   });
 
   // Get coefficients for this number of spans

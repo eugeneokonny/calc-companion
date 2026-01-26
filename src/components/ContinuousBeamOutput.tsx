@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle2, XCircle, AlertTriangle, FileText, GitBranch } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { DesignAdvisory } from "./DesignAdvisory";
-import { ContinuousBeamDiagram } from "./diagrams/ContinuousBeamDiagram";
+import { ContinuousBeamDiagram, ContinuousBeam3D } from "./diagrams";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -215,22 +216,44 @@ export function ContinuousBeamOutput({ result }: ContinuousBeamOutputProps) {
           />
         )}
 
-        {/* Continuous Beam Diagram */}
-        <ContinuousBeamDiagram 
-          spans={result.spanResults.map(span => ({
-            spanIndex: span.spanIndex,
-            length: span.length,
-            topSteel: span.topSteel,
-            bottomSteel: span.bottomSteel,
-            links: `T${span.linkSize}@${span.linkSpacing}`,
-            positiveMoment: span.positiveMoment,
-            negativeMomentLeft: span.negativeMomentLeft,
-            negativeMomentRight: span.negativeMomentRight,
-          }))}
-          width={result.summary.width || width}
-          depth={effectiveDepth + 50}
-          cover={25}
-        />
+        {/* Continuous Beam Diagrams - 2D and 3D */}
+        <Tabs defaultValue="3d" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="2d">2D Elevation</TabsTrigger>
+            <TabsTrigger value="3d">3D Visualization</TabsTrigger>
+          </TabsList>
+          <TabsContent value="2d">
+            <ContinuousBeamDiagram 
+              spans={result.spanResults.map(span => ({
+                spanIndex: span.spanIndex,
+                length: span.length,
+                topSteel: span.topSteel,
+                bottomSteel: span.bottomSteel,
+                links: `T${span.linkSize}@${span.linkSpacing}`,
+                positiveMoment: span.positiveMoment,
+                negativeMomentLeft: span.negativeMomentLeft,
+                negativeMomentRight: span.negativeMomentRight,
+              }))}
+              width={result.summary.width || width}
+              depth={effectiveDepth + 50}
+              cover={25}
+            />
+          </TabsContent>
+          <TabsContent value="3d">
+            <ContinuousBeam3D 
+              spans={result.spanResults.map(span => ({
+                spanIndex: span.spanIndex,
+                length: span.length,
+                topSteel: span.topSteel,
+                bottomSteel: span.bottomSteel,
+                links: `T${span.linkSize}@${span.linkSpacing}`,
+              }))}
+              width={result.summary.width || width}
+              depth={effectiveDepth + 50}
+              cover={25}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* ==================== SECTION A — LOADING ==================== */}
         <SectionHeader 
