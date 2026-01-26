@@ -194,23 +194,46 @@ Links: T${input.linkDiameter}`,
     bsReference: "BS8110 Cl. 3.4.4.1"
   });
 
-  // STEP 3: Load Calculation
+  // STEP 3: Load Calculation - Enhanced with detailed UDL breakdown
   const totalDeadLoad = input.deadLoad + selfWeight;
-  const ultimateLoad = gamma_dead * totalDeadLoad + gamma_live * input.liveLoad;
+  const factoredDeadLoad = gamma_dead * totalDeadLoad;
+  const factoredLiveLoad = gamma_live * input.liveLoad;
+  const ultimateLoad = factoredDeadLoad + factoredLiveLoad;
+  
+  // Calculate load proportions for accuracy verification
+  const deadLoadProportion = (factoredDeadLoad / ultimateLoad) * 100;
+  const liveLoadProportion = (factoredLiveLoad / ultimateLoad) * 100;
   
   steps.push({
-    title: "Step 3: Ultimate Design Load",
-    formula: "w = 1.4(Gk + SW) + 1.6Qk",
-    substitution: `Gk = ${input.deadLoad} kN/m (imposed dead)
-SW = ${selfWeight.toFixed(2)} kN/m (self-weight)
-Total Gk = ${input.deadLoad} + ${selfWeight.toFixed(2)} = ${totalDeadLoad.toFixed(2)} kN/m
-Qk = ${input.liveLoad} kN/m
+    title: "Step 3: Ultimate Design Load (UDL)",
+    formula: "w = γG × Gk(total) + γQ × Qk",
+    substitution: `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHARACTERISTIC LOADS (Unfactored)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Imposed Dead Load (Gk)    = ${input.deadLoad.toFixed(3)} kN/m
+  Self-Weight (SW)          = ${selfWeight.toFixed(3)} kN/m
+  ────────────────────────────────────────────
+  Total Dead Load           = ${totalDeadLoad.toFixed(3)} kN/m
+  Live Load (Qk)            = ${input.liveLoad.toFixed(3)} kN/m
 
-w = 1.4 × ${totalDeadLoad.toFixed(2)} + 1.6 × ${input.liveLoad}
-w = ${(gamma_dead * totalDeadLoad).toFixed(2)} + ${(gamma_live * input.liveLoad).toFixed(2)}`,
-    result: `w = ${ultimateLoad.toFixed(2)} kN/m`,
-    explanation: "Partial safety factors: γf = 1.4 for dead loads, γf = 1.6 for live loads",
-    bsReference: "BS8110 Cl. 2.4.3"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTIAL SAFETY FACTORS (BS 8110 Cl. 2.4.3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  γG (dead loads)           = 1.4
+  γQ (live loads)           = 1.6
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ULTIMATE LOADS (Factored)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Factored Dead = 1.4 × ${totalDeadLoad.toFixed(3)} = ${factoredDeadLoad.toFixed(3)} kN/m
+  Factored Live = 1.6 × ${input.liveLoad.toFixed(3)} = ${factoredLiveLoad.toFixed(3)} kN/m
+  ────────────────────────────────────────────
+  Ultimate UDL  = ${factoredDeadLoad.toFixed(3)} + ${factoredLiveLoad.toFixed(3)}`,
+    result: `w = ${ultimateLoad.toFixed(3)} kN/m
+
+Load Proportions: Dead ${deadLoadProportion.toFixed(1)}% | Live ${liveLoadProportion.toFixed(1)}%`,
+    explanation: "Ultimate limit state load combination for strength design. BS 8110-1 specifies γG = 1.4 for dead loads and γQ = 1.6 for live loads as partial safety factors to account for load variability and uncertainty.",
+    bsReference: "BS8110 Cl. 2.4.3 Table 2.1"
   });
 
   // STEP 4: Ultimate Moment

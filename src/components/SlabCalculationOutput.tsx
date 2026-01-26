@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle2, XCircle, FileText, Grid3X3 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { DesignAdvisory } from "./DesignAdvisory";
-import { SlabDiagram } from "./diagrams/SlabDiagram";
+import { SlabDiagram, Slab3D } from "./diagrams";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -208,18 +209,39 @@ export function SlabCalculationOutput({ result }: SlabCalculationOutputProps) {
           />
         )}
 
-        {/* Slab Diagram */}
-        <SlabDiagram 
-          thickness={s.thickness}
-          shortSpan={s.shortSpan}
-          longSpan={s.longSpan}
-          cover={s.cover}
-          bottomShortBars={s.shortSpanBarSuggestion}
-          bottomLongBars={s.longSpanBarSuggestion}
-          topShortBars={s.negativeShortMoment && s.negativeShortMoment > 0 ? s.shortSpanBarSuggestion : undefined}
-          topLongBars={s.negativeLongMoment && s.negativeLongMoment > 0 ? s.longSpanBarSuggestion : undefined}
-          slabType={s.slabType as 'One-Way Slab' | 'Two-Way Slab'}
-        />
+        {/* Slab Diagrams - 2D and 3D */}
+        <Tabs defaultValue="3d" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="2d">2D Plan View</TabsTrigger>
+            <TabsTrigger value="3d">3D Visualization</TabsTrigger>
+          </TabsList>
+          <TabsContent value="2d">
+            <SlabDiagram 
+              thickness={s.thickness}
+              shortSpan={s.shortSpan}
+              longSpan={s.longSpan}
+              cover={s.cover}
+              bottomShortBars={s.shortSpanBarSuggestion}
+              bottomLongBars={s.longSpanBarSuggestion}
+              topShortBars={s.negativeShortMoment && s.negativeShortMoment > 0 ? s.shortSpanBarSuggestion : undefined}
+              topLongBars={s.negativeLongMoment && s.negativeLongMoment > 0 ? s.longSpanBarSuggestion : undefined}
+              slabType={s.slabType as 'One-Way Slab' | 'Two-Way Slab'}
+            />
+          </TabsContent>
+          <TabsContent value="3d">
+            <Slab3D 
+              thickness={s.thickness}
+              shortSpan={s.shortSpan}
+              longSpan={s.longSpan}
+              cover={s.cover}
+              bottomShortBars={s.shortSpanBarSuggestion}
+              bottomLongBars={s.longSpanBarSuggestion}
+              topShortBars={s.negativeShortMoment && s.negativeShortMoment > 0 ? s.shortSpanBarSuggestion : undefined}
+              topLongBars={s.negativeLongMoment && s.negativeLongMoment > 0 ? s.longSpanBarSuggestion : undefined}
+              slabType={s.slabType as 'One-Way Slab' | 'Two-Way Slab'}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* ==================== SECTION A — SLAB DECLARATION ==================== */}
         <SectionHeader 

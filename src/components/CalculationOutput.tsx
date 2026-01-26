@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle2, XCircle, FileText } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { DesignAdvisory } from "./DesignAdvisory";
-import { BeamDiagram } from "./diagrams/BeamDiagram";
+import { BeamDiagram, Beam3D } from "./diagrams";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -209,16 +210,36 @@ export function CalculationOutput({ result }: CalculationOutputProps) {
           />
         )}
 
-        {/* Beam Diagram */}
-        <BeamDiagram 
-          width={s.width}
-          depth={s.overallDepth}
-          cover={s.cover}
-          topBars={s.compressionBarSuggestion || "2T12"}
-          bottomBars={s.barSuggestion}
-          links={`T${s.linkSize}@${s.linkSpacing}`}
-          isDoublyReinforced={s.isDoublyReinforced}
-        />
+        {/* Beam Diagrams - 2D and 3D */}
+        <Tabs defaultValue="3d" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="2d">2D Cross-Section</TabsTrigger>
+            <TabsTrigger value="3d">3D Visualization</TabsTrigger>
+          </TabsList>
+          <TabsContent value="2d">
+            <BeamDiagram 
+              width={s.width}
+              depth={s.overallDepth}
+              cover={s.cover}
+              topBars={s.compressionBarSuggestion || "2T12"}
+              bottomBars={s.barSuggestion}
+              links={`T${s.linkSize}@${s.linkSpacing}`}
+              isDoublyReinforced={s.isDoublyReinforced}
+            />
+          </TabsContent>
+          <TabsContent value="3d">
+            <Beam3D 
+              width={s.width}
+              depth={s.overallDepth}
+              length={s.span}
+              cover={s.cover}
+              topBars={s.compressionBarSuggestion || "2T12"}
+              bottomBars={s.barSuggestion}
+              links={`T${s.linkSize}@${s.linkSpacing}`}
+              isDoublyReinforced={s.isDoublyReinforced}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* ==================== SECTION A — LOADING ==================== */}
         <SectionHeader 

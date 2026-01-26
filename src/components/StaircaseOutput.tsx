@@ -4,7 +4,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { Copy, CheckCircle2, XCircle, AlertTriangle, Footprints, Lightbulb } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { StaircaseDiagram } from "./diagrams/StaircaseDiagram";
+import { StaircaseDiagram, Staircase3D } from "./diagrams";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { StaircaseResult } from "@/lib/staircaseCalculations";
 
 interface StaircaseOutputProps {
@@ -152,17 +153,37 @@ Design per BS 8110-1:1997`;
           </div>
         </div>
 
-        {/* Staircase Diagram */}
-        <StaircaseDiagram 
-          spanLength={summary.effectiveSpan}
-          waistThickness={summary.waistThickness}
-          riserHeight={summary.riserHeight}
-          goingLength={summary.goingLength}
-          numberOfSteps={summary.numberOfRisers}
-          cover={summary.cover || 25}
-          mainBars={summary.barSuggestion}
-          distributionBars={summary.distBarSuggestion}
-        />
+        {/* Staircase Diagrams - 2D and 3D */}
+        <Tabs defaultValue="3d" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="2d">2D Elevation</TabsTrigger>
+            <TabsTrigger value="3d">3D Visualization</TabsTrigger>
+          </TabsList>
+          <TabsContent value="2d">
+            <StaircaseDiagram 
+              spanLength={summary.effectiveSpan}
+              waistThickness={summary.waistThickness}
+              riserHeight={summary.riserHeight}
+              goingLength={summary.goingLength}
+              numberOfSteps={summary.numberOfRisers}
+              cover={summary.cover || 25}
+              mainBars={summary.barSuggestion}
+              distributionBars={summary.distBarSuggestion}
+            />
+          </TabsContent>
+          <TabsContent value="3d">
+            <Staircase3D 
+              spanLength={summary.effectiveSpan}
+              waistThickness={summary.waistThickness}
+              riserHeight={summary.riserHeight}
+              goingLength={summary.goingLength}
+              numberOfSteps={summary.numberOfRisers}
+              cover={summary.cover || 25}
+              mainBars={summary.barSuggestion}
+              distributionBars={summary.distBarSuggestion}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* Reinforcement Summary */}
         <div className="p-4 border rounded-lg bg-primary/5">
